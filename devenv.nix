@@ -14,6 +14,7 @@
   packages = [
     pkgs.quarkus
     pkgs.openspec
+    pkgs.rtk
     ];
 
   # https://devenv.sh/languages/
