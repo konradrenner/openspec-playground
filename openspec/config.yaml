@@ -1,13 +1,31 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  Projekt: Durchlauferhitzer (org.konis openspec-playground)
+  Sprache: Deutsch für Doku und Kommunikation, Englisch für Code-Bezeichner.
+
+  Technologie-Stack:
+  - Java (aktuelle LTS-Version)
+  - Quarkus (aktuelle LTS-Version)
+  - Maven (aktuelle Version) als Buildsystem
+  - Tooling-Verwaltung ausschließlich via devenv.nix
+    (Ziel: alles lokal ohne Docker, aber trotzdem isoliert, testbar und startbar)
+  - groupId: org.kore.durchlauferhitzer
+
+  Architektur:
+  - Domain-Driven Design (DDD): Die Architektur muss sich auch im Naming
+    des Source Codes widerspiegeln (Bounded Contexts, Aggregates, Entities,
+    Value Objects, Repositories, Domain Services etc.).
+  - Clean Architecture nach dem Boundary-Control-Entity-Muster (BCE),
+    um die Abhängigkeiten von außen nach innen zu erzwingen.
+  - Keep it simple, stupid (KISS) ist Pflicht: keine Over-Engineerung,
+    keine Spekulation, der einfachste Weg, der die Anforderung erfüllt.
+
+  Testing:
+  - Architekturtests mit ArchUnit (sichern DDD-Struktur und BCE-Regeln ab).
+  - Unit-Tests mit Mockito und JUnit 5 - bewusst OHNE QuarkusTest,
+    damit Unit-Tests nicht vom Framework abhängen; Ausführung via Surefire.
+  - Integrationstests mit QuarkusTest erlaubt; Ausführung via Failsafe.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.
