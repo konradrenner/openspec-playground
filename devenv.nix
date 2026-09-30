@@ -18,13 +18,39 @@
     ];
 
   # https://devenv.sh/languages/
-  # languages.rust.enable = true;
-
-  # https://devenv.sh/processes/
-  # processes.dev.exec = "${lib.getExe pkgs.watchexec} -n -- ls -la";
+  # GraalVM CE (Java 25 LTS) inkl. native-image: ermoeglicht native Kompilierung.
+  languages.java = {
+    enable = true;
+    jdk.package = pkgs.graalvmPackages.graalvm-ce;
+    maven.enable = true;
+  };
 
   # https://devenv.sh/services/
-  # services.postgres.enable = true;
+  # OTel-Collector: OTLP via gRPC (4317) und HTTP (4318), Ausgabe via Debug-Exporter.
+  services.opentelemetry-collector = {
+    enable = true;
+    configFile = ./otelcol/config.yaml;
+  };
+  # WireMock: Port 8089, Stubs aus wiremock/mappings (pro Stub eine JSON-Datei).
+  services.wiremock = {
+    enable = true;
+    port = 8089;
+    rootDir = config.devenv.root + "/wiremock";
+  };
+
+  services.postgres = {
+    enable = true;
+    listen_addresses = "127.0.0.1";
+    initialDatabases = [
+      {
+        name = "durchlauferhitzer";
+        user = "durchlauferhitzer";
+        pass = "durchlauferhitzer";
+      }
+    ];
+  };
+  services.kafka.enable = true;
+  services.opensearch.enable = true;
 
   # https://devenv.sh/scripts/
   scripts.hello.exec = ''

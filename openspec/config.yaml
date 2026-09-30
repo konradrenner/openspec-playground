@@ -5,7 +5,8 @@ context: |
   Sprache: Deutsch für Doku und Kommunikation, Englisch für Code-Bezeichner.
 
   Technologie-Stack:
-  - Java (aktuelle LTS-Version)
+  - GraalVM CE (aktuelle LTS, Java 25) als JDK - inkl. native-image,
+    native Kompilierung ist moeglich (Quarkus: mvn -Pnative package)
   - Quarkus (aktuelle LTS-Version)
   - Maven (aktuelle Version) als Buildsystem
   - Tooling-Verwaltung ausschließlich via devenv.nix
@@ -13,11 +14,14 @@ context: |
   - groupId: org.kore.durchlauferhitzer
 
   Architektur:
-  - Domain-Driven Design (DDD): Die Architektur muss sich auch im Naming
-    des Source Codes widerspiegeln (Bounded Contexts, Aggregates, Entities,
-    Value Objects, Repositories, Domain Services etc.).
-  - Clean Architecture nach dem Boundary-Control-Entity-Muster (BCE),
-    um die Abhängigkeiten von außen nach innen zu erzwingen.
+  - Modularisierung: durchlauferhitzer-model (kanonisches Modell, keine
+    Projektabhaengigkeiten), durchlauferhitzer-adapter-<kanal> (ein Adapter-Modul
+    pro Kanal, z. B. rest, soap; hängen nur vom Modell ab), durchlauferhitzer-service
+    (Kernprojekt mit den Nachrichtenfluessen, aggregiert Adapter und Modell,
+    Quarkus-Anwendung). Der Graph ist zyklenfrei: service -> adapter -> model.
+  - Jedes Modul ist intern nach Boundary-Control-Entity strukturiert
+    (Packages boundary, control, entity): entity kennt nur entity, control kennt
+    entity, boundary kennt control und entity.
   - Keep it simple, stupid (KISS) ist Pflicht: keine Over-Engineerung,
     keine Spekulation, der einfachste Weg, der die Anforderung erfüllt.
 
