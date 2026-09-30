@@ -91,6 +91,13 @@ fi
 
 curl -sS -X POST "$WIREMOCK/__admin/scenarios/reset" -o /dev/null
 
+# Ein bereits laufender Service wuerde den Start des Test-Runners verhindern
+# (Port 8080) und die Szenarien gegen die falsche Instanz laufen lassen.
+if dienst_laeuft "$SERVICE/api/v1/kaufauftraege/$(uuid)"; then
+  rot "Auf Port 8080 laeuft bereits ein Service - bitte stoppen (Runner mit kurzen Test-Intervallen wird benoetigt)."
+  exit 1
+fi
+
 # ---------------------------------------------------------------- 2. Service starten
 
 if [[ ! -f "$RUNNER" ]]; then
