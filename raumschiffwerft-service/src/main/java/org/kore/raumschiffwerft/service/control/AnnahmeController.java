@@ -32,14 +32,14 @@ public class AnnahmeController {
     private final ZustellungRepository zustellungRepository;
     private final Zielsystemwahl zielsystemwahl;
     private final ObjectMapper objectMapper;
-    private final long leaseMinuten;
+    private final long leaseSekunden;
     private final String instanz;
 
     @Inject
     public AnnahmeController(AgroalDataSource dataSource, AuftragRepository auftragRepository,
                              OutboxRepository outboxRepository, ZustellungRepository zustellungRepository,
                              Zielsystemwahl zielsystemwahl, ObjectMapper objectMapper,
-                             @ConfigProperty(name = "zustellung.lease-minuten") long leaseMinuten,
+                             @ConfigProperty(name = "zustellung.lease-sekunden") long leaseSekunden,
                              @ConfigProperty(name = "zustellung.instanz") String instanz) {
         this.dataSource = dataSource;
         this.auftragRepository = auftragRepository;
@@ -47,7 +47,7 @@ public class AnnahmeController {
         this.zustellungRepository = zustellungRepository;
         this.zielsystemwahl = zielsystemwahl;
         this.objectMapper = objectMapper;
-        this.leaseMinuten = leaseMinuten;
+        this.leaseSekunden = leaseSekunden;
         this.instanz = instanz;
     }
 
@@ -89,7 +89,7 @@ public class AnnahmeController {
 
             Zustellung zustellung = new Zustellung(auftragsId, zielsystemtyp,
                     Zustellungsstatus.IN_ZUSTELLUNG, null, 0, null,
-                    jetzt.plusMinutes(leaseMinuten), instanz, jetzt);
+                    jetzt.plusSeconds(leaseSekunden), instanz, jetzt);
             zustellungRepository.anlegen(verbindung, zustellung);
 
             verbindung.commit();

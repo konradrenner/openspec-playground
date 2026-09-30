@@ -36,7 +36,7 @@ class ZustellungssteuerungTest {
         zustellung = new Zustellung(auftragsId, Zielsystemtyp.IMPERIUM,
                 Zustellungsstatus.IN_ZUSTELLUNG, null, 0, null,
                 OffsetDateTime.now().plusMinutes(10), "test-pod", OffsetDateTime.now());
-        when(zustellungRepository.verbuchen(any())).thenReturn(1);
+        when(zustellungRepository.verbuchen(any(), any())).thenReturn(1);
     }
 
     private org.kore.raumschiffwerft.service.entity.Kaufauftrag auftrag(Zustellung zustellung) {
@@ -55,7 +55,7 @@ class ZustellungssteuerungTest {
 
         assertEquals(Zustellungsstatus.BESTAETIGT, zustellung.status());
         assertEquals("ISD-4711", zustellung.externeReferenz());
-        verify(zustellungRepository).verbuchen(zustellung);
+        verify(zustellungRepository).verbuchen(zustellung, Zustellungsstatus.IN_ZUSTELLUNG);
     }
 
     @Test
@@ -66,17 +66,17 @@ class ZustellungssteuerungTest {
 
         assertEquals(Zustellungsstatus.UNGEKLAERT, zustellung.status());
         assertNotNull(zustellung.naechsterVersuchUm());
-        verify(zustellungRepository).verbuchen(zustellung);
+        verify(zustellungRepository).verbuchen(zustellung, Zustellungsstatus.IN_ZUSTELLUNG);
     }
 
     @Test
     void verbuchenOhneTrefferWirftKeinenFehler() throws SQLException, ZustellungUngeklaert {
-        when(zustellungRepository.verbuchen(any())).thenReturn(0);
+        when(zustellungRepository.verbuchen(any(), any())).thenReturn(0);
         when(zustellport.zustellen(any(), any(), any())).thenThrow(new ZustellungUngeklaert("Stub-Fehler"));
 
         steuerung.zustellen(auftrag(zustellung));
 
-        verify(zustellungRepository).verbuchen(zustellung);
+        verify(zustellungRepository).verbuchen(zustellung, Zustellungsstatus.IN_ZUSTELLUNG);
     }
 
     @Test

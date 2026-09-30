@@ -9,6 +9,7 @@ import org.jboss.logging.Logger;
 import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.model.entity.Zustellbestaetigung;
 import org.kore.raumschiffwerft.service.entity.Kaufauftrag;
+import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
 
 /**
@@ -37,6 +38,7 @@ public class Zustellungssteuerung {
 
     public void zustellen(Kaufauftrag auftrag) {
         for (Zustellung zustellung : auftrag.zustellungen()) {
+            Zustellungsstatus ausgangsstatus = zustellung.status();
             try {
                 Zustellbestaetigung bestaetigung = zustellport.zustellen(zustellung.auftragsId(),
                         auftrag.kanonischerAuftrag(), zustellung.zielsystem());
@@ -46,13 +48,13 @@ public class Zustellungssteuerung {
                         zustellung.zielsystem(), zustellung.auftragsId().wert());
                 zustellung.ungeklaertErklaeren(OffsetDateTime.now().plusSeconds(wiederholungSekunden));
             }
-            verbuchen(zustellung);
+            verbuchen(zustellung, ausgangsstatus);
         }
     }
 
-    private void verbuchen(Zustellung zustellung) {
+    private void verbuchen(Zustellung zustellung, Zustellungsstatus erwarteterAusgangsstatus) {
         try {
-            zustellungRepository.verbuchen(zustellung);
+            zustellungRepository.verbuchen(zustellung, erwarteterAusgangsstatus);
         } catch (SQLException e) {
             throw new IllegalStateException(
                     "Verbuchen der Zustellung gescheitert (auftragsId=%s, zielsystem=%s)"

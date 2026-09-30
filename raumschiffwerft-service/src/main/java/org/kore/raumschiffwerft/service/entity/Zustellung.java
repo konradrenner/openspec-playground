@@ -7,9 +7,10 @@ import org.kore.raumschiffwerft.model.entity.Zielsystemtyp;
 
 /**
  * Eine Zustellung eines Auftrags an genau ein Zielsystem, einschliesslich
- * ihrer Zustandsmaschine: In diesem Change ist nur der Uebergang
- * IN_ZUSTELLUNG -> BESTAETIGT / UNGEKLAERT erlaubt; illegale Uebergaenge
- * werden abgelehnt und fuehren zu keinem Schreibzugriff.
+ * ihrer Zustandsmaschine: IN_ZUSTELLUNG -> BESTAETIGT / UNGEKLAERT (Erstzustellung),
+ * IN_ZUSTELLUNG / UNGEKLAERT / IN_ABGLEICH -> IN_ABGLEICH (Beanspruchen durch
+ * die Abgleich-Route) und IN_ABGLEICH -> BESTAETIGT / UNGEKLAERT / FEHLGESCHLAGEN.
+ * Illegale Uebergaenge werden abgelehnt und fuehren zu keinem Schreibzugriff.
  */
 public final class Zustellung {
 
@@ -19,8 +20,8 @@ public final class Zustellung {
     private String externeReferenz;
     private int versuche;
     private OffsetDateTime naechsterVersuchUm;
-    private final OffsetDateTime leaseBis;
-    private final String instanz;
+    private OffsetDateTime leaseBis;
+    private String instanz;
     private OffsetDateTime aktualisiertAm;
 
     public Zustellung(AuftragsId auftragsId, Zielsystemtyp zielsystem, Zustellungsstatus status,
@@ -38,33 +39,74 @@ public final class Zustellung {
     }
 
     /**
-     * Verbucht eine erfolgreiche Zustellung: genau erlaubt vom
-     * Ausgangszustand IN_ZUSTELLUNG aus.
+     * Verbucht eine erfolgreiche Zustellung: erlaubt vom Ausgangszustand
+     * IN_ZUSTELLUNG (Erstzustellung, zaehlt den Versuch) oder IN_ABGLEICH
+     * (Abgleich, der Versuch wurde beim Beanspruchen gezaehlt).
      */
     public void bestaetigen(String externeReferenz) {
-        wechsleZu(Zustellungsstatus.BESTAETIGT);
+        ausgangPruefen(Zustellungsstatus.IN_ZUSTELLUNG, Zustellungsstatus.IN_ABGLEICH);
+        versuchZaehlenBeiErstzustellung();
+        status = Zustellungsstatus.BESTAETIGT;
         this.externeReferenz = Objects.requireNonNull(externeReferenz);
+        this.naechsterVersuchUm = null;
+        aktualisiertAm = OffsetDateTime.now();
     }
 
     /**
-     * Verbucht eine ungeklaerte Zustellung mit dem Zeitpunkt des
-     * naechsten Versuchs; genau erlaubt vom Ausgangszustand
-     * IN_ZUSTELLUNG aus.
+     * Verbucht eine ungeklaerte Zustellung mit dem Zeitpunkt des naechsten
+     * Versuchs: erlaubt vom Ausgangszustand IN_ZUSTELLUNG oder IN_ABGLEICH.
      */
     public void ungeklaertErklaeren(OffsetDateTime naechsterVersuchUm) {
-        wechsleZu(Zustellungsstatus.UNGEKLAERT);
+        ausgangPruefen(Zustellungsstatus.IN_ZUSTELLUNG, Zustellungsstatus.IN_ABGLEICH);
+        versuchZaehlenBeiErstzustellung();
+        status = Zustellungsstatus.UNGEKLAERT;
         this.naechsterVersuchUm = Objects.requireNonNull(naechsterVersuchUm);
+        aktualisiertAm = OffsetDateTime.now();
     }
 
-    private void wechsleZu(Zustellungsstatus ziel) {
-        if (status != Zustellungsstatus.IN_ZUSTELLUNG) {
-            throw new IllegalStateException(
-                    "Ungueltiger Uebergang von %s nach %s (erlaubt nur von IN_ZUSTELLUNG)"
-                            .formatted(status, ziel));
-        }
-        status = ziel;
-        versuche++;
+    /**
+     * Verbucht das endgueltige Scheitern nach max-versuchen: erlaubt nur
+     * vom Ausgangszustand IN_ABGLEICH.
+     */
+    public void fehlgeschlagenErklaeren() {
+        ausgangPruefen(Zustellungsstatus.IN_ABGLEICH);
+        status = Zustellungsstatus.FEHLGESCHLAGEN;
+        this.naechsterVersuchUm = null;
         aktualisiertAm = OffsetDateTime.now();
+    }
+
+    /**
+     * Beansprucht die Zustellung fuer den Abgleich: erlaubt von
+     * IN_ZUSTELLUNG (abgelaufene Lease), UNGEKLAERT (faelliger Versuch)
+     * und IN_ABGLEICH (erneut abgelaufene Lease). Der Uebergang erhoehen
+     * versuche - wie das atomare Beanspruchs-Statement in der Datenbank,
+     * wenn das Aggregat aus dem Vorzustand aufgebaut wird.
+     */
+    public void beanspruchen(OffsetDateTime leaseBis, String instanz) {
+        ausgangPruefen(Zustellungsstatus.IN_ZUSTELLUNG, Zustellungsstatus.UNGEKLAERT,
+                Zustellungsstatus.IN_ABGLEICH);
+        versuche++;
+        status = Zustellungsstatus.IN_ABGLEICH;
+        this.leaseBis = Objects.requireNonNull(leaseBis);
+        this.instanz = Objects.requireNonNull(instanz);
+        aktualisiertAm = OffsetDateTime.now();
+    }
+
+    private void versuchZaehlenBeiErstzustellung() {
+        if (status == Zustellungsstatus.IN_ZUSTELLUNG) {
+            versuche++;
+        }
+    }
+
+    private void ausgangPruefen(Zustellungsstatus... erlaubteAusgaenge) {
+        for (Zustellungsstatus erlaubt : erlaubteAusgaenge) {
+            if (status == erlaubt) {
+                return;
+            }
+        }
+        throw new IllegalStateException(
+                "Ungueltiger Uebergang von %s (erlaubt nur von %s)"
+                        .formatted(status, java.util.Arrays.toString(erlaubteAusgaenge)));
     }
 
     public AuftragsId auftragsId() {

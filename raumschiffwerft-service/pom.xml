@@ -47,6 +47,11 @@
       <groupId>org.apache.camel.quarkus</groupId>
       <artifactId>camel-quarkus-direct</artifactId>
     </dependency>
+    <!-- Timer-Route des Abgleichs faelliger Zustellungen -->
+    <dependency>
+      <groupId>org.apache.camel.quarkus</groupId>
+      <artifactId>camel-quarkus-timer</artifactId>
+    </dependency>
     <!-- Persistenz: Flyway-Migrationen und plain JDBC gegen die devenv-Postgres -->
     <dependency>
       <groupId>io.quarkus</groupId>
@@ -71,6 +76,12 @@
     <dependency>
       <groupId>io.rest-assured</groupId>
       <artifactId>rest-assured</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- Asynchrones Warten auf konvergierende Zustaende in Integrationstests -->
+    <dependency>
+      <groupId>org.awaitility</groupId>
+      <artifactId>awaitility</artifactId>
       <scope>test</scope>
     </dependency>
     <!-- Integrationstests (*IT, Failsafe) -->
