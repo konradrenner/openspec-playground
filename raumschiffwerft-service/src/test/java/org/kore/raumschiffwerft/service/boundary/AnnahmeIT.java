@@ -143,10 +143,11 @@ class AnnahmeIT {
         org.junit.jupiter.api.Assertions.assertEquals(1, zeilen("zustellung", id));
         org.junit.jupiter.api.Assertions.assertEquals(1, zeilen("journal_outbox", id));
 
-        // Outbox ohne Versand
+        // Journaleintrag existiert genau einmal; der Versand laeuft asynchron
+        // ueber den Journal-Relay (gesendet_am siehe JournalRelayIT)
         try (Connection c = dataSource.getConnection();
                 PreparedStatement ps = c.prepareStatement(
-                        "SELECT count(*) FROM journal_outbox WHERE auftrags_id = ? AND gesendet_am IS NULL")) {
+                        "SELECT count(*) FROM journal_outbox WHERE auftrags_id = ?")) {
             ps.setObject(1, id);
             try (ResultSet rs = ps.executeQuery()) {
                 rs.next();

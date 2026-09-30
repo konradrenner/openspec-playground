@@ -58,6 +58,9 @@ context: |
 #       - Always include a "Non-goals" section
 #     tasks:
 #       - Break tasks into chunks of max 2 hours
+rules:
+  specs:
+    - "Normative Schluesselwoerter bleiben Deutsch (MUSS/MUESSEN/DARF) statt MUST/SHALL; das Qualitaetsgate ist `openspec validate` OHNE --strict (dessen RFC-2119-Pruefung ist englisch-only und scheitert bewusst)."
 
 # Per-operation guidance (optional)
 # Add advisory guidance for how apply and archive work should be conducted.

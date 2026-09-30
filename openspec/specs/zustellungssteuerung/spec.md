@@ -79,7 +79,7 @@ Der Auftrag MUSS als Aggregat `Kaufauftrag` mit seinen Zustellungen modelliert s
 - **THEN** umfasst sie IN_ZUSTELLUNG, IN_ABGLEICH, UNGEKLAERT, BESTAETIGT und FEHLGESCHLAGEN, wobei alle fuenf Zustaende erreichbar sind: IN_ABGLEICH durch das Beanspruchen der Abgleich-Route, FEHLGESCHLAGEN nach max-versuchen
 
 ### Requirement: Zustellungszeilen mit Lease, nie Loeschungen
-Bei der Annahme MUSS pro gewaehltem Zielsystem eine Zustellungszeile als IN_ZUSTELLUNG mit Lease (lease_bis, instanz) angelegt werden. Zustellungs- und Auftragszeilen DUERFEN NIE geloescht werden.
+Bei der Annahme MUSS pro gewaehltem Zielsystem eine Zustellungszeile als IN_ZUSTELLUNG mit Lease (lease_bis, instanz) angelegt werden. Loeschungen von Zustellungs- und Auftragszeilen gibt es NUR durch das Aufraeumen (Faehigkeit aufraeumen) und nur gemaess der Aufbewahrungsregel: Auftraege, deren Zustellungen alle BESTAETIGT sind und deren Aufbewahrungsfrist abgelaufen ist. Jede andere Komponente DARF keine Zeilen loeschen; Auftraege mit einer Zustellung in FEHLGESCHLAGEN werden von keinem automatischen Aufraeumen geloescht.
 
 #### Scenario: Zustellungszeile mit Lease
 - **WHEN** ein Auftrag mit Zielsystem imperium angenommen wird
@@ -87,7 +87,7 @@ Bei der Annahme MUSS pro gewaehltem Zielsystem eine Zustellungszeile als IN_ZUST
 
 #### Scenario: Keine Loeschung
 - **WHEN** eine Zustellung bestaetigt oder fuer ungeklaert erklaert wurde
-- **THEN** bleibt die Zeile in der Datenbank bestehen
+- **THEN** bleibt die Zeile bestehen, solange die Aufbewahrungsfrist des Auftrags nicht abgelaufen ist oder nicht alle Zustellungen BESTAETIGT sind; geloescht wird ausschliesslich durch das Aufraeumen gemaess der Aufbewahrungsregel
 
 ### Requirement: Abgleich-Route beansprucht faellige Zustellungen atomar
 Eine Abgleich-Route MUSS periodisch (konfigurierbares Intervall) faellige Zustellungen beanspruchen. Das Beanspruchen MUSS atomar per `UPDATE zustellung ... WHERE (auftrags_id, zielsystem) IN (SELECT ... FOR UPDATE SKIP LOCKED) RETURNING` erfolgen, sodass konkurrierende Instanzen dieselbe Zeile nie doppelt bearbeiten. Faellig sind Zeilen mit Status UNGEKLAERT und `naechster_versuch_um <= now()` sowie Zeilen mit Status IN_ZUSTELLUNG oder IN_ABGLEICH und abgelaufener Lease (`lease_bis < now()`). Das Beanspruchen MUSS den Status auf IN_ABGLEICH setzen, eine neue Lease vergeben, `versuche` um eins erhoehen und die eigene `instanz` eintragen. Der kanonische Auftrag MUSS per Join aus `auftrag` gelesen werden.

@@ -52,6 +52,16 @@
       <groupId>org.apache.camel.quarkus</groupId>
       <artifactId>camel-quarkus-timer</artifactId>
     </dependency>
+    <!-- Outbox-Relay (Producer) und Journal-Indexierung (Consumer) -->
+    <dependency>
+      <groupId>org.apache.camel.quarkus</groupId>
+      <artifactId>camel-quarkus-kafka</artifactId>
+    </dependency>
+    <!-- OpenSearch-Indexierung (REST-Client) -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest-client-jackson</artifactId>
+    </dependency>
     <!-- Persistenz: Flyway-Migrationen und plain JDBC gegen die devenv-Postgres -->
     <dependency>
       <groupId>io.quarkus</groupId>

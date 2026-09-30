@@ -32,15 +32,15 @@ Die Tabelle `zustellung` MUSS den Primaerschluessel (auftrags_id, zielsystem) un
 - **THEN** nutzt die Datenbank den partiellen Index, ohne abgeschlossene Zustaende zu scannen
 
 ### Requirement: Tabelle journal_outbox
-Die Tabelle `journal_outbox` MUSS die Spalten id, auftrags_id, payload (jsonb), erstellt_am, gesendet_am haben. Der Payload MUSS schemaVersion, auftragsId, empfangenAm, traceId, traceparent, rohPayload (der unverarbeitete Original-Body als String) und den kanonischen kaufauftrag enthalten. In diesem Change wird die Tabelle nur befuellt; gesendet_am bleibt ungesetzt.
+Die Tabelle `journal_outbox` MUSS die Spalten id, auftrags_id, payload (jsonb), erstellt_am, gesendet_am haben. Der Payload MUSS schemaVersion, auftragsId, empfangenAm, traceId, traceparent, rohPayload (der unverarbeitete Original-Body als String) und den kanonischen kaufauftrag enthalten. Die Tabelle wird von der Komponente kaufauftrag in der Annahme-Transaktion befuellt; `gesendet_am` bleibt ungesetzt, bis der Journal-Relay (Faehigkeit journal) die Zeile bestaetigt an Kafka versendet hat.
 
 #### Scenario: Journaleintrag bei Annahme
 - **WHEN** ein Auftrag angenommen wurde
 - **THEN** existiert genau ein journal_outbox-Eintrag fuer die AuftragsId mit rohPayload (Original-Body als String), Trace-Kontext (traceId, traceparent) und kanonischem Auftrag
 
 #### Scenario: Kein Versand in diesem Change
-- **WHEN** ein Journaleintrag existiert
-- **THEN** ist gesendet_am nicht gesetzt, weil kein Versand (Kafka) implementiert ist
+- **WHEN** ein Journaleintrag noch nicht vom Journal-Relay versendet wurde
+- **THEN** ist sein gesendet_am ungesetzt; der Relay setzt es erst nach der bestaetigten Sendung (Details siehe Faehigkeit journal)
 
 ### Requirement: Annahme in EINER Transaktion
 Die Annahme MUSS in EINER Datenbanktransaktion erfolgen: INSERT in auftrag mit ON CONFLICT DO NOTHING als Idempotenz-Check, der Outbox-Eintrag und pro gewaehltem Zielsystem eine zustellung als IN_ZUSTELLUNG mit Lease. Bei Konflikt (Auftrag existiert bereits) MUSS der bestehende Stand zurueckgegeben werden, OHNE dass Outbox-Eintrag oder Zustellungszeilen erneut geschrieben werden. Schlägt die Transaktion fehl, MUSS nichts geschrieben bleiben.
@@ -56,3 +56,10 @@ Die Annahme MUSS in EINER Datenbanktransaktion erfolgen: INSERT in auftrag mit O
 #### Scenario: Fehlerhafter Abbruch laesst nichts zurueck
 - **WHEN** die Annahme-Transaktion vor dem Commit fehlschlaegt
 - **THEN** existiert keine auftrag-Zeile, kein Journaleintrag und keine Zustellungszeile dieses Auftrags
+
+### Requirement: Partielle Indizes fuer das Aufraeumen
+Fuer die Loeschabfragen des Aufraeumens MUeSSEN partielle Indizes existieren (Flyway-Migration V2): ein partieller Index auf `journal_outbox` (id) fuer Zeilen mit gesetztem gesendet_am und ein partieller Index auf `zustellung` (auftrags_id) fuer Zeilen mit Status ungleich BESTAETIGT. Zusaetzlich MUSS ein Index auf `auftrag` (angenommen_am) die Altersfilterung stuetzen.
+
+#### Scenario: Indizes existieren nach der Migration
+- **WHEN** der Service gegen eine Datenbank mit Schema-Version 1 startet
+- **THEN** legt Flyway V2 die Indizes fuer die Aufraeum-Abfragen an, ohne bestehende Tabellen oder Spalten zu veraendern
