@@ -43,9 +43,9 @@
     listen_addresses = "127.0.0.1";
     initialDatabases = [
       {
-        name = "durchlauferhitzer";
-        user = "durchlauferhitzer";
-        pass = "durchlauferhitzer";
+        name = "raumschiffwerft";
+        user = "raumschiffwerft";
+        pass = "raumschiffwerft";
       }
     ];
   };

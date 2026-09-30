@@ -12,14 +12,14 @@ Die Entwicklungsumgebung MUSS via devenv.nix ein JDK 25 und Maven bereitstellen,
 - **THEN** meldet `java` GraalVM CE auf Java-25-Basis (inkl. `native-image`) und `mvn` eine aktuelle Maven-Version
 
 ### Requirement: Infrastruktur-Dienste laufen via devenv
-devenv.nix MUSS die Dienste Kafka, Postgres und OpenSearch starten können. Für Postgres MÜSSEN die Datenbank `durchlauferhitzer` und der User `durchlauferhitzer` eingerichtet sein. Die Dienste DÜRFEN nicht via Docker bereitgestellt werden.
+devenv.nix MUSS die Dienste Kafka, Postgres und OpenSearch starten können. Für Postgres MÜSSEN die Datenbank `raumschiffwerft` und der User `raumschiffwerft` eingerichtet sein. Die Dienste DÜRFEN nicht via Docker bereitgestellt werden.
 
 #### Scenario: Dienste starten
 - **WHEN** `devenv up` ausgeführt wird
-- **THEN** sind Kafka, Postgres (mit Datenbank und User `durchlauferhitzer`) und OpenSearch erreichbar
+- **THEN** sind Kafka, Postgres (mit Datenbank und User `raumschiffwerft`) und OpenSearch erreichbar
 
 #### Scenario: Postgres-Zugriff
-- **WHEN** sich ein Client als User `durchlauferhitzer` mit der Datenbank `durchlauferhitzer` verbindet
+- **WHEN** sich ein Client als User `raumschiffwerft` mit der Datenbank `raumschiffwerft` verbindet
 - **THEN** wird die Verbindung angenommen
 
 ### Requirement: OTel Collector nimmt OTLP entgegen

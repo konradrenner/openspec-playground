@@ -1,24 +1,42 @@
 schema: spec-driven
 
 context: |
-  Projekt: Durchlauferhitzer (org.konis openspec-playground)
+  Projekt: Raumschiffwerft (groupId: org.kore.raumschiffwerft)
   Sprache: Deutsch für Doku und Kommunikation, Englisch für Code-Bezeichner.
+
+  Fachlichkeit (Kontext, Details kommen pro Change):
+  - Die Raumschiffwerft nimmt Aufträge zum Bau von Sternenzerstörern entgegen,
+    entweder für die Rebellion oder für das Imperium.
+  - Der raumschiffwerft-service bietet die REST-Schnittstelle (Aufträge anlegen
+    und anzeigen), konvertiert die eingehenden Daten ins kanonische interne
+    Modell und routet/transformiert via Apache Camel an die konkreten Ziele.
+  - Die Adapter übersetzen vom kanonischen internen Modell in ein Modell für
+    den Aufruf des jeweiligen externen Dienstes: Imperium via SOAP
+    (raumschiffwerft-adapter-imperium), Rebellion via REST
+    (raumschiffwerft-adapter-rebellion). In den Adaptern ist Camel tabu; sie
+    rufen die externen Dienste über Jakarta-EE-APIs und wo notwendig
+    Quarkus-APIs auf.
+  - raumschiffwerft-model stellt das kanonische interne Datenmodell bereit
+    (nur DTOs und falls notwendig Interfaces, keine Framework-Abhängigkeiten).
+  - Auslieferung als modularer Monolith: Die Adapter sind Bibliotheken
+    (nicht standalone lauffähig); nur der service ist die lauffähige
+    Quarkus-Anwendung.
 
   Technologie-Stack:
   - GraalVM CE (aktuelle LTS, Java 25) als JDK - inkl. native-image,
     native Kompilierung ist moeglich (Quarkus: mvn -Pnative package)
-  - Quarkus (aktuelle LTS-Version)
+  - Quarkus (aktuelle LTS-Version), Apache Camel via camel-quarkus
   - Maven (aktuelle Version) als Buildsystem
   - Tooling-Verwaltung ausschließlich via devenv.nix
     (Ziel: alles lokal ohne Docker, aber trotzdem isoliert, testbar und startbar)
-  - groupId: org.kore.durchlauferhitzer
 
   Architektur:
-  - Modularisierung: durchlauferhitzer-model (kanonisches Modell, keine
-    Projektabhaengigkeiten), durchlauferhitzer-adapter-<kanal> (ein Adapter-Modul
-    pro Kanal, z. B. rest, soap; hängen nur vom Modell ab), durchlauferhitzer-service
-    (Kernprojekt mit den Nachrichtenfluessen, aggregiert Adapter und Modell,
-    Quarkus-Anwendung). Der Graph ist zyklenfrei: service -> adapter -> model.
+  - Modularisierung: raumschiffwerft-model (kanonisches Modell, keine
+    Projektabhaengigkeiten), raumschiffwerft-adapter-imperium (SOAP-Ziel,
+    hängt nur vom Modell ab), raumschiffwerft-adapter-rebellion (REST-Ziel,
+    hängt nur vom Modell ab), raumschiffwerft-service (REST-Schnittstelle,
+    Camel-Routing, aggregiert Adapter und Modell, Quarkus-Anwendung).
+    Der Graph ist zyklenfrei: service -> adapter -> model.
   - Jedes Modul ist intern nach Boundary-Control-Entity strukturiert
     (Packages boundary, control, entity): entity kennt nur entity, control kennt
     entity, boundary kennt control und entity.
@@ -26,7 +44,7 @@ context: |
     keine Spekulation, der einfachste Weg, der die Anforderung erfüllt.
 
   Testing:
-  - Architekturtests mit ArchUnit (sichern DDD-Struktur und BCE-Regeln ab).
+  - Architekturtests mit ArchUnit (sichern Modul-Layering und BCE-Regeln ab).
   - Unit-Tests mit Mockito und JUnit 5 - bewusst OHNE QuarkusTest,
     damit Unit-Tests nicht vom Framework abhängen; Ausführung via Surefire.
   - Integrationstests mit QuarkusTest erlaubt; Ausführung via Failsafe.
