@@ -1,0 +1,17 @@
+{
+  "name": "rebellion_status_unbekannt",
+  "priority": 1,
+  "request": {
+    "method": "GET",
+    "url": "/api/v1/beschaffungen/00000000-0000-0000-0000-000000000404/status"
+  },
+  "response": {
+    "status": 404,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "status": "UNBEKANNT"
+    }
+  }
+}

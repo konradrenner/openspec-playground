@@ -1,0 +1,25 @@
+{
+  "name": "rebellion_beschaffung_langsam",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/beschaffungen",
+    "bodyPatterns": [
+      {
+        "jsonPath": "$.auftraggeber",
+        "contains": "Langsam"
+      }
+    ]
+  },
+  "response": {
+    "status": 201,
+    "fixedDelayMilliseconds": 5000,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "beschaffungsId": "RB-1138",
+      "status": "IN_ARBEIT"
+    }
+  }
+}

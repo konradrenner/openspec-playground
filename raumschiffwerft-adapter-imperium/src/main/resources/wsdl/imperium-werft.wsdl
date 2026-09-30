@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<wsdl:definitions xmlns:wsdl="http://schemas.xmlsoap.org/wsdl/"
+                  xmlns:soap="http://schemas.xmlsoap.org/wsdl/soap/"
+                  xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                  xmlns:tns="urn:org:kore:imperium:werft:v1"
+                  targetNamespace="urn:org:kore:imperium:werft:v1"
+                  name="ImperiumWerftService">
+
+  <wsdl:types>
+    <xsd:schema targetNamespace="urn:org:kore:imperium:werft:v1"
+                elementFormDefault="qualified">
+
+      <xsd:element name="bestelleSternenzerstoerer">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="auftragsReferenz" type="xsd:string"/>
+            <xsd:element name="besteller" type="xsd:string"/>
+            <xsd:element name="klasse" type="xsd:string"/>
+            <xsd:element name="stueckzahl" type="xsd:int"/>
+            <xsd:element name="zielwelt" type="xsd:int"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="bestelleSternenzerstoererResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="bestellnummer" type="xsd:string"/>
+            <xsd:element name="eingangsstatus" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="abfrageBestellstatus">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="auftragsReferenz" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+      <xsd:element name="abfrageBestellstatusResponse">
+        <xsd:complexType>
+          <xsd:sequence>
+            <xsd:element name="status" type="xsd:string"/>
+            <xsd:element name="bestellnummer" type="xsd:string"/>
+          </xsd:sequence>
+        </xsd:complexType>
+      </xsd:element>
+
+    </xsd:schema>
+  </wsdl:types>
+
+  <wsdl:message name="bestelleSternenzerstoerer">
+    <wsdl:part name="parameters" element="tns:bestelleSternenzerstoerer"/>
+  </wsdl:message>
+  <wsdl:message name="bestelleSternenzerstoererResponse">
+    <wsdl:part name="parameters" element="tns:bestelleSternenzerstoererResponse"/>
+  </wsdl:message>
+  <wsdl:message name="abfrageBestellstatus">
+    <wsdl:part name="parameters" element="tns:abfrageBestellstatus"/>
+  </wsdl:message>
+  <wsdl:message name="abfrageBestellstatusResponse">
+    <wsdl:part name="parameters" element="tns:abfrageBestellstatusResponse"/>
+  </wsdl:message>
+
+  <wsdl:portType name="ImperiumWerft">
+    <wsdl:operation name="BestelleSternenzerstoerer">
+      <wsdl:input message="tns:bestelleSternenzerstoerer"/>
+      <wsdl:output message="tns:bestelleSternenzerstoererResponse"/>
+    </wsdl:operation>
+    <wsdl:operation name="AbfrageBestellstatus">
+      <wsdl:input message="tns:abfrageBestellstatus"/>
+      <wsdl:output message="tns:abfrageBestellstatusResponse"/>
+    </wsdl:operation>
+  </wsdl:portType>
+
+  <wsdl:binding name="ImperiumWerftSoapBinding" type="tns:ImperiumWerft">
+    <soap:binding style="document" transport="http://schemas.xmlsoap.org/soap/http"/>
+    <wsdl:operation name="BestelleSternenzerstoerer">
+      <soap:operation soapAction="urn:org:kore:imperium:werft:v1:BestelleSternenzerstoerer"/>
+      <wsdl:input>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+    <wsdl:operation name="AbfrageBestellstatus">
+      <soap:operation soapAction="urn:org:kore:imperium:werft:v1:AbfrageBestellstatus"/>
+      <wsdl:input>
+        <soap:body use="literal"/>
+      </wsdl:input>
+      <wsdl:output>
+        <soap:body use="literal"/>
+      </wsdl:output>
+    </wsdl:operation>
+  </wsdl:binding>
+
+  <wsdl:service name="ImperiumWerftService">
+    <wsdl:port name="ImperiumWerftPort" binding="tns:ImperiumWerftSoapBinding">
+      <soap:address location="http://localhost:8089/imperium"/>
+    </wsdl:port>
+  </wsdl:service>
+
+</wsdl:definitions>

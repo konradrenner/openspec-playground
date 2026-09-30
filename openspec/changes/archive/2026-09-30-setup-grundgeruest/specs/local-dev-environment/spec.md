@@ -36,9 +36,9 @@ devenv.nix MUSS WireMock auf Port 8089 starten. Die Stub-Definitionen MÜSSEN al
 - **WHEN** eine in `wiremock/mappings` als JSON-Datei definierte Anfrage an WireMock auf Port 8089 gesendet wird
 - **THEN** antwortet WireMock mit der im Stub definierten Antwort
 
-#### Scenario: Neuer Stub ohne Neustart nutzbar
-- **WHEN** eine weitere JSON-Datei in `wiremock/mappings` abgelegt wird
-- **THEN** wird der neue Stub von WireMock ohne Änderung an devenv.nix bedient
+#### Scenario: Neuer Stub ohne devenv-Anpassung nutzbar
+- **WHEN** eine weitere JSON-Datei in `wiremock/mappings` abgelegt und der WireMock-Prozess neu gestartet wird
+- **THEN** wird der neue Stub von WireMock bedient, ohne dass `devenv.nix` angepasst werden muss
 
 ### Requirement: Anwendung startet gegen die lokalen Dienste
 Die (in diesem Change leere) Quarkus-Anwendung MUSS mit `devenv up` laufenden Diensten starten können, ohne dass Dienste fehlen oder die Anwendung mit Konfigurationsfehlern abbricht.

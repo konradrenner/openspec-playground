@@ -1,0 +1,18 @@
+{
+  "name": "rebellion_beschaffung_erfolg",
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/beschaffungen"
+  },
+  "response": {
+    "status": 201,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "beschaffungsId": "RB-1138",
+      "status": "IN_ARBEIT"
+    }
+  }
+}

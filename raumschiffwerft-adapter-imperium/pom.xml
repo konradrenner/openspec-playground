@@ -12,6 +12,11 @@
 
   <artifactId>raumschiffwerft-adapter-imperium</artifactId>
 
+  <properties>
+    <!-- Gleiche Version wie der von quarkus-cxf verwaltete Apache CXF (4.1.7) -->
+    <cxf.codegen.version>4.1.7</cxf.codegen.version>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.kore.raumschiffwerft</groupId>
@@ -33,6 +38,32 @@
 
   <build>
     <plugins>
+      <!-- Client-Stubs aus der WSDL generieren (SOAP 1.1, document/literal) -->
+      <plugin>
+        <groupId>org.apache.cxf</groupId>
+        <artifactId>cxf-codegen-plugin</artifactId>
+        <version>${cxf.codegen.version}</version>
+        <executions>
+          <execution>
+            <id>generate-imperium-wsdl-stubs</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>wsdl2java</goal>
+            </goals>
+            <configuration>
+              <wsdlOptions>
+                <wsdlOption>
+                  <wsdl>${project.basedir}/src/main/resources/wsdl/imperium-werft.wsdl</wsdl>
+                  <extraargs>
+                    <extraarg>-p</extraarg>
+                    <extraarg>org.kore.raumschiffwerft.adapter.imperium.werft.v1</extraarg>
+                  </extraargs>
+                </wsdlOption>
+              </wsdlOptions>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
       <!-- Jandex-Index, damit Quarkus die Adapter-Klassen findet -->
       <plugin>
         <groupId>io.smallrye</groupId>

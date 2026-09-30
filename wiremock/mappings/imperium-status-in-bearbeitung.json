@@ -1,0 +1,23 @@
+{
+  "name": "imperium_status_in_bearbeitung",
+  "priority": 10,
+  "scenarioName": "imperium-status",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "abgeschlossen",
+  "request": {
+    "method": "POST",
+    "urlPath": "/imperium",
+    "bodyPatterns": [
+      {
+        "matchesXPath": "//*[local-name()='abfrageBestellstatus']"
+      }
+    ]
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "text/xml; charset=utf-8"
+    },
+    "body": "<soapenv:Envelope xmlns:soapenv='http://schemas.xmlsoap.org/soap/envelope/'><soapenv:Body><ns2:abfrageBestellstatusResponse xmlns:ns2='urn:org:kore:imperium:werft:v1'><ns2:status>IN_BEARBEITUNG</ns2:status><ns2:bestellnummer>ISD-4711</ns2:bestellnummer></ns2:abfrageBestellstatusResponse></soapenv:Body></soapenv:Envelope>"
+  }
+}

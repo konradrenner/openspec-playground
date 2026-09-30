@@ -1,0 +1,19 @@
+{
+  "name": "rebellion_status_erledigt",
+  "priority": 10,
+  "scenarioName": "rebellion-status",
+  "requiredScenarioState": "erledigt",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/api/v1/beschaffungen/[^/]+/status"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "status": "ERLEDIGT"
+    }
+  }
+}

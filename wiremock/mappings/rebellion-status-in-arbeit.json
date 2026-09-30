@@ -1,0 +1,20 @@
+{
+  "name": "rebellion_status_in_arbeit",
+  "priority": 10,
+  "scenarioName": "rebellion-status",
+  "requiredScenarioState": "Started",
+  "newScenarioState": "erledigt",
+  "request": {
+    "method": "GET",
+    "urlPathPattern": "/api/v1/beschaffungen/[^/]+/status"
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "status": "IN_ARBEIT"
+    }
+  }
+}

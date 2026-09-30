@@ -1,0 +1,23 @@
+{
+  "name": "rebellion_beschaffung_jar_jar",
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/api/v1/beschaffungen",
+    "bodyPatterns": [
+      {
+        "jsonPath": "$.auftraggeber",
+        "contains": "Jar Jar"
+      }
+    ]
+  },
+  "response": {
+    "status": 500,
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "jsonBody": {
+      "fehler": "Auftraggeber nicht bonitaetsgeprueft"
+    }
+  }
+}
