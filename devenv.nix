@@ -6,6 +6,15 @@
   ...
 }:
 
+# Trace-Viewer: moderner Zipkin-Server (3.x, in-memory, UI auf :9411).
+# Das nixpkgs-Zipkin (1.28) spricht nur die alte v1-API, der OTel-Collector
+# exportiert aber v2 - daher der exec-JAR aus Maven Central per fetchurl.
+let
+  zipkin-server = pkgs.fetchurl {
+    url = "https://repo1.maven.org/maven2/io/zipkin/zipkin-server/3.6.1/zipkin-server-3.6.1-exec.jar";
+    sha256 = "18al0rlghwqbm7cq5ix7g0jya1j7an4gca0jm3dmaf7lsh76wcnq";
+  };
+in
 {
   # https://devenv.sh/basics/
   env.GREET = "devenv";
@@ -15,6 +24,8 @@
     pkgs.quarkus
     pkgs.openspec
     pkgs.rtk
+    pkgs.curl
+    pkgs.jq
     ];
 
   # https://devenv.sh/languages/
@@ -52,10 +63,18 @@
   services.kafka.enable = true;
   services.opensearch.enable = true;
 
+  # Trace-Viewer: Zipkin (in-memory, UI auf http://localhost:9411).
+  # Der OTel-Collector exportiert die Traces dorthin (otelcol/config.yaml).
+  processes.zipkin.exec = "${pkgs.jdk}/bin/java -jar ${zipkin-server}";
+
   # https://devenv.sh/scripts/
   scripts.hello.exec = ''
     echo hello from $GREET
   '';
+
+  # End-to-End-Simulation gegen die devenv-Dienste:
+  #   devenv up -d && e2e
+  scripts.e2e.exec = "bash $DEVENV_ROOT/scripts/e2e.sh";
 
   # https://devenv.sh/basics/
   enterShell = ''

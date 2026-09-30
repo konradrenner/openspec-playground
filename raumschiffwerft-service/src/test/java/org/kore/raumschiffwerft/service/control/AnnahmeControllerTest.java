@@ -14,6 +14,7 @@ import org.kore.raumschiffwerft.service.entity.Kaufauftrag;
 import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.agroal.api.AgroalDataSource;
+import io.opentelemetry.api.OpenTelemetry;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -38,7 +39,8 @@ class AnnahmeControllerTest {
     private final ZustellungRepository zustellungRepository = mock(ZustellungRepository.class);
     private final Zielsystemwahl zielsystemwahl = mock(Zielsystemwahl.class);
     private final AnnahmeController controller = new AnnahmeController(dataSource, auftragRepository,
-            outboxRepository, zustellungRepository, zielsystemwahl, new ObjectMapper(), 10, "test-pod");
+            outboxRepository, zustellungRepository, zielsystemwahl,
+            new TraceKontext(OpenTelemetry.noop()), new ObjectMapper(), 10, "test-pod");
 
     private final AuftragsId auftragsId = new AuftragsId(UUID.randomUUID());
     private final org.kore.raumschiffwerft.model.entity.Kaufauftrag kanonisch =

@@ -14,6 +14,11 @@ import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.service.entity.Backoff;
 import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 
 /**
  * Abgleichssteuerung: beansprucht periodisch faellige Zustellungen
@@ -33,6 +38,8 @@ public class Abgleichssteuerung {
     private final Abgleichsport abgleichsport;
     private final Zustellport zustellport;
     private final Backoff backoff;
+    private final Tracer tracer;
+    private final MeterRegistry meterRegistry;
     private final long leaseSekunden;
     private final int maxVersuche;
     private final int batch;
@@ -42,6 +49,8 @@ public class Abgleichssteuerung {
     public Abgleichssteuerung(ZustellungRepository zustellungRepository,
                               Abgleichsport abgleichsport,
                               Zustellport zustellport,
+                              OpenTelemetry openTelemetry,
+                              MeterRegistry meterRegistry,
                               @ConfigProperty(name = "zustellung.wiederholung-sekunden") long basisSekunden,
                               @ConfigProperty(name = "abgleich.backoff-max-sekunden") long backoffMaxSekunden,
                               @ConfigProperty(name = "abgleich.jitter-anteil") double jitterAnteil,
@@ -53,6 +62,8 @@ public class Abgleichssteuerung {
         this.abgleichsport = abgleichsport;
         this.zustellport = zustellport;
         this.backoff = new Backoff(basisSekunden, backoffMaxSekunden, jitterAnteil, new Random());
+        this.tracer = openTelemetry.getTracer("durchlauferhitzer.abgleich");
+        this.meterRegistry = meterRegistry;
         this.maxVersuche = maxVersuche;
         this.batch = batch;
         this.leaseSekunden = leaseSekunden;
@@ -83,8 +94,37 @@ public class Abgleichssteuerung {
         }
     }
 
+    /**
+     * Verarbeitet eine beanspruchte Zustellung im eigenen Abgleich-Span
+     * (Attribute auftrag.id, zielsystem, ausgangsstatus); eine nach
+     * abgelaufener Lease uebernommene Zustellung zaehlt den Lease-Counter.
+     */
     private void verarbeiten(Beanspruchung beanspruchung) {
         Zustellung zustellung = beanspruchung.zustellung();
+        zaehlenLeaseUebernahme(beanspruchung);
+        Span span = tracer.spanBuilder("abgleich")
+                .setAttribute("durchlauferhitzer.auftrag.id", zustellung.auftragsId().wert().toString())
+                .setAttribute("durchlauferhitzer.zielsystem", zustellung.zielsystem().name())
+                .setAttribute("durchlauferhitzer.zustellstatus",
+                        beanspruchung.ausgangsstatus().name())
+                .startSpan();
+        try (Scope ignoriert = span.makeCurrent()) {
+            statusAbgleichen(beanspruchung, zustellung);
+        } finally {
+            span.end();
+        }
+    }
+
+    /** Absturz-Uebernahme: Ausgangszustand stammte aus einer abgelaufenen Lease. */
+    private void zaehlenLeaseUebernahme(Beanspruchung beanspruchung) {
+        if (beanspruchung.ausgangsstatus() != Zustellungsstatus.UNGEKLAERT) {
+            meterRegistry.counter("durchlauferhitzer.lease.abgelaufen",
+                            "ausgangsstatus", beanspruchung.ausgangsstatus().name())
+                    .increment();
+        }
+    }
+
+    private void statusAbgleichen(Beanspruchung beanspruchung, Zustellung zustellung) {
         Verarbeitungsstatus status;
         try {
             status = abgleichsport.statusAbfragen(zustellung.auftragsId(), zustellung.zielsystem());
@@ -143,6 +183,10 @@ public class Abgleichssteuerung {
     private void verbuchen(Zustellung zustellung) {
         try {
             zustellungRepository.verbuchen(zustellung, Zustellungsstatus.IN_ABGLEICH);
+            meterRegistry.counter("durchlauferhitzer.zustellungen",
+                            "zielsystem", zustellung.zielsystem().name(),
+                            "ergebnis", zustellung.status().name())
+                    .increment();
         } catch (SQLException e) {
             throw new IllegalStateException(
                     "Verbuchen des Abgleichsergebnisses gescheitert (auftragsId=%s, zielsystem=%s)"

@@ -25,8 +25,10 @@ class ZustellungssteuerungTest {
 
     private final Zustellport zustellport = mock(Zustellport.class);
     private final ZustellungRepository zustellungRepository = mock(ZustellungRepository.class);
+    private final io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry =
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
     private final Zustellungssteuerung steuerung =
-            new Zustellungssteuerung(zustellport, zustellungRepository, 60);
+            new Zustellungssteuerung(zustellport, zustellungRepository, meterRegistry, 60);
 
     private final AuftragsId auftragsId = new AuftragsId(UUID.randomUUID());
     private Zustellung zustellung;
@@ -56,6 +58,8 @@ class ZustellungssteuerungTest {
         assertEquals(Zustellungsstatus.BESTAETIGT, zustellung.status());
         assertEquals("ISD-4711", zustellung.externeReferenz());
         verify(zustellungRepository).verbuchen(zustellung, Zustellungsstatus.IN_ZUSTELLUNG);
+        assertEquals(1, meterRegistry.get("durchlauferhitzer.zustellungen")
+                .tag("zielsystem", "IMPERIUM").tag("ergebnis", "BESTAETIGT").counter().count());
     }
 
     @Test
@@ -67,6 +71,8 @@ class ZustellungssteuerungTest {
         assertEquals(Zustellungsstatus.UNGEKLAERT, zustellung.status());
         assertNotNull(zustellung.naechsterVersuchUm());
         verify(zustellungRepository).verbuchen(zustellung, Zustellungsstatus.IN_ZUSTELLUNG);
+        assertEquals(1, meterRegistry.get("durchlauferhitzer.zustellungen")
+                .tag("zielsystem", "IMPERIUM").tag("ergebnis", "UNGEKLAERT").counter().count());
     }
 
     @Test

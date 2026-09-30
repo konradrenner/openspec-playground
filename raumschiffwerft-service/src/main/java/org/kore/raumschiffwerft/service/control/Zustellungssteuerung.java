@@ -11,13 +11,15 @@ import org.kore.raumschiffwerft.model.entity.Zustellbestaetigung;
 import org.kore.raumschiffwerft.service.entity.Kaufauftrag;
 import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
+import io.micrometer.core.instrument.MeterRegistry;
 
 /**
  * Zustellungssteuerung: liefert nach dem Commit der Annahme jede
  * Zustellung synchron ueber den Zustellport aus (das kanonische Modell
  * kommt aus dem Speicher, kein DB-Select) und verbucht den Ausgang mit
  * GENAU EINEM konditionalen Update pro Zustellung. Der Adapter selbst
- * verbucht nie.
+ * verbucht nie. Span-Attribute (auftrag.id, zielsystem, ergebnis) und
+ * der Ergebnis-Counter werden hier gepflegt.
  */
 @ApplicationScoped
 public class Zustellungssteuerung {
@@ -26,19 +28,25 @@ public class Zustellungssteuerung {
 
     private final Zustellport zustellport;
     private final ZustellungRepository zustellungRepository;
+    private final MeterRegistry meterRegistry;
     private final long wiederholungSekunden;
 
     @Inject
     public Zustellungssteuerung(Zustellport zustellport, ZustellungRepository zustellungRepository,
+                                MeterRegistry meterRegistry,
                                 @ConfigProperty(name = "zustellung.wiederholung-sekunden") long wiederholungSekunden) {
         this.zustellport = zustellport;
         this.zustellungRepository = zustellungRepository;
+        this.meterRegistry = meterRegistry;
         this.wiederholungSekunden = wiederholungSekunden;
     }
 
     public void zustellen(Kaufauftrag auftrag) {
         for (Zustellung zustellung : auftrag.zustellungen()) {
             Zustellungsstatus ausgangsstatus = zustellung.status();
+            SpanAttribute.setzen("durchlauferhitzer.auftrag.id",
+                    zustellung.auftragsId().wert().toString());
+            SpanAttribute.setzen("durchlauferhitzer.zielsystem", zustellung.zielsystem().name());
             try {
                 Zustellbestaetigung bestaetigung = zustellport.zustellen(zustellung.auftragsId(),
                         auftrag.kanonischerAuftrag(), zustellung.zielsystem());
@@ -48,8 +56,17 @@ public class Zustellungssteuerung {
                         zustellung.zielsystem(), zustellung.auftragsId().wert());
                 zustellung.ungeklaertErklaeren(OffsetDateTime.now().plusSeconds(wiederholungSekunden));
             }
+            SpanAttribute.setzen("durchlauferhitzer.zustellstatus", zustellung.status().name());
             verbuchen(zustellung, ausgangsstatus);
+            zaehlen(zustellung);
         }
+    }
+
+    private void zaehlen(Zustellung zustellung) {
+        meterRegistry.counter("durchlauferhitzer.zustellungen",
+                        "zielsystem", zustellung.zielsystem().name(),
+                        "ergebnis", zustellung.status().name())
+                .increment();
     }
 
     private void verbuchen(Zustellung zustellung, Zustellungsstatus erwarteterAusgangsstatus) {

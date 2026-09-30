@@ -17,7 +17,7 @@ import java.util.List;
 public class JournalOutboxRepository {
 
     private static final String UNGESENDETE_LESEN =
-            "SELECT id, auftrags_id::text, payload::text FROM journal_outbox "
+            "SELECT id, auftrags_id::text, payload::text, payload->>'traceparent' FROM journal_outbox "
                     + "WHERE gesendet_am IS NULL ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED";
 
     private static final String GESENDET_MARKIEREN =
@@ -33,7 +33,8 @@ public class JournalOutboxRepository {
             ps.setInt(1, batch);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    eintraege.add(new Journaleintrag(rs.getLong(1), rs.getString(2), rs.getString(3)));
+                    eintraege.add(new Journaleintrag(rs.getLong(1), rs.getString(2),
+                            rs.getString(3), rs.getString(4)));
                 }
             }
         }

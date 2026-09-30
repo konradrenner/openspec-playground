@@ -9,6 +9,11 @@ import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 import io.agroal.api.AgroalDataSource;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanBuilder;
+import io.opentelemetry.api.trace.Tracer;
+import io.opentelemetry.context.Scope;
 
 /**
  * Journal-Relay: versendet ungesendete Outbox-Zeilen in Batches
@@ -29,19 +34,26 @@ public class JournalRelay {
     private final AgroalDataSource dataSource;
     private final JournalOutboxRepository outboxRepository;
     private final JournalVersand versand;
+    private final Tracer tracer;
     private final int batch;
 
     @Inject
     public JournalRelay(AgroalDataSource dataSource, JournalVersand versand,
+                        OpenTelemetry openTelemetry,
                         @ConfigProperty(name = "journal.relay.batch") int batch) {
-        this(dataSource, new JournalOutboxRepository(), versand, batch);
+        this.dataSource = dataSource;
+        this.outboxRepository = new JournalOutboxRepository();
+        this.versand = versand;
+        this.tracer = openTelemetry.getTracer("durchlauferhitzer.journal");
+        this.batch = batch;
     }
 
     JournalRelay(AgroalDataSource dataSource, JournalOutboxRepository outboxRepository,
-                 JournalVersand versand, int batch) {
+                 JournalVersand versand, OpenTelemetry openTelemetry, int batch) {
         this.dataSource = dataSource;
         this.outboxRepository = outboxRepository;
         this.versand = versand;
+        this.tracer = openTelemetry.getTracer("durchlauferhitzer.journal");
         this.batch = batch;
     }
 
@@ -53,8 +65,7 @@ public class JournalRelay {
                 List<Journaleintrag> eintraege = outboxRepository.ungesendeteLesen(verbindung, batch);
                 OffsetDateTime gesendetAm = OffsetDateTime.now();
                 for (Journaleintrag eintrag : eintraege) {
-                    versand.senden(eintrag.auftragsId(), eintrag.payload());
-                    outboxRepository.gesendetMarkieren(verbindung, eintrag.id(), gesendetAm);
+                    versenden(verbindung, eintrag, gesendetAm);
                 }
                 verbindung.commit();
                 if (!eintraege.isEmpty()) {
@@ -70,6 +81,25 @@ public class JournalRelay {
             }
         } catch (SQLException e) {
             LOG.warnf(e, "Journal-Relay: Verbindung zur Outbox nicht moeglich");
+        }
+    }
+
+    /**
+     * Sendet einen Eintrag im eigenen Span, der per Span-Link mit dem
+     * gespeicherten traceparent (Annahme-Span) verknuepft ist; der
+     * Versand propagiert diesen Kontext als Kafka-Header.
+     */
+    private void versenden(Connection verbindung, Journaleintrag eintrag,
+                           OffsetDateTime gesendetAm) throws SQLException {
+        SpanBuilder builder = tracer.spanBuilder("journal.relay")
+                .setAttribute("durchlauferhitzer.auftrag.id", eintrag.auftragsId());
+        W3cTraceKontext.spanContext(eintrag.traceparent()).ifPresent(builder::addLink);
+        Span span = builder.startSpan();
+        try (Scope ignoriert = span.makeCurrent()) {
+            versand.senden(eintrag.auftragsId(), eintrag.payload());
+            outboxRepository.gesendetMarkieren(verbindung, eintrag.id(), gesendetAm);
+        } finally {
+            span.end();
         }
     }
 }

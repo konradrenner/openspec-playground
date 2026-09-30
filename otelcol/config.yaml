@@ -13,13 +13,16 @@ receivers:
 exporters:
   debug:
     verbosity: detailed
+  # Trace-Viewer: Traces zusaetzlich nach Zipkin (devenv-Prozess, UI :9411)
+  zipkin:
+    endpoint: "http://localhost:9411/api/v2/spans"
 
 service:
   extensions: [health_check]
   pipelines:
     traces:
       receivers: [otlp]
-      exporters: [debug]
+      exporters: [debug, zipkin]
     metrics:
       receivers: [otlp]
       exporters: [debug]

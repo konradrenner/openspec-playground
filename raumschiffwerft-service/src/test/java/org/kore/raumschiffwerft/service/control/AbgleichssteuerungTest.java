@@ -31,10 +31,13 @@ class AbgleichssteuerungTest {
     private final ZustellungRepository zustellungRepository = mock(ZustellungRepository.class);
     private final Abgleichsport abgleichsport = mock(Abgleichsport.class);
     private final Zustellport zustellport = mock(Zustellport.class);
+    private final io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry =
+            new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
 
     // kurze Backoff-Basis und max-versuche 2 wie im Testprofil
     private final Abgleichssteuerung steuerung =
             new Abgleichssteuerung(zustellungRepository, abgleichsport, zustellport,
+                    io.opentelemetry.api.OpenTelemetry.noop(), meterRegistry,
                     1, 4, 0.2, 2, 20, 2, "abgleich-pod");
 
     private final AuftragsId auftragsId = new AuftragsId(UUID.randomUUID());
@@ -43,10 +46,15 @@ class AbgleichssteuerungTest {
 
     /** Baut eine beanspruchte Zustellung: IN_ABGLEICH mit dem Versuchszaehler nach dem Beanspruchen. */
     private Beanspruchung beansprucht(int versuche) {
+        return beansprucht(versuche, Zustellungsstatus.UNGEKLAERT);
+    }
+
+    private Beanspruchung beansprucht(int versuche, Zustellungsstatus ausgangsstatus) {
         return new Beanspruchung(
                 new Zustellung(auftragsId, Zielsystemtyp.IMPERIUM, Zustellungsstatus.IN_ABGLEICH,
                         null, versuche, null, OffsetDateTime.now().plusSeconds(30), "abgleich-pod",
                         OffsetDateTime.now()),
+                ausgangsstatus,
                 kaufauftrag);
     }
 
@@ -151,6 +159,48 @@ class AbgleichssteuerungTest {
     }
 
     @Test
+    void ergebnisZaehltDenZustellCounter() throws Exception {
+        Beanspruchung beanspruchung = beansprucht(1);
+        when(abgleichsport.statusAbfragen(auftragsId, Zielsystemtyp.IMPERIUM))
+                .thenReturn(Verarbeitungsstatus.mitExternerReferenz(
+                        Verarbeitungsstatus.Status.ABGESCHLOSSEN, "ISD-4711"));
+
+        durchlaufMit(beanspruchung);
+
+        org.junit.jupiter.api.Assertions.assertEquals(1, meterRegistry
+                .get("durchlauferhitzer.zustellungen")
+                .tag("zielsystem", "IMPERIUM").tag("ergebnis", "BESTAETIGT").counter().count());
+    }
+
+    @Test
+    void leaseUebernahmeZaehltDenLeaseCounter() throws Exception {
+        Beanspruchung beanspruchung = beansprucht(1, Zustellungsstatus.IN_ZUSTELLUNG);
+        when(abgleichsport.statusAbfragen(auftragsId, Zielsystemtyp.IMPERIUM))
+                .thenReturn(Verarbeitungsstatus.mitExternerReferenz(
+                        Verarbeitungsstatus.Status.ABGESCHLOSSEN, "ISD-4711"));
+
+        durchlaufMit(beanspruchung);
+
+        org.junit.jupiter.api.Assertions.assertEquals(1, meterRegistry
+                .get("durchlauferhitzer.lease.abgelaufen")
+                .tag("ausgangsstatus", "IN_ZUSTELLUNG").counter().count());
+    }
+
+    @Test
+    void faelligeUngEKlaerteZaehlenKeinenLeaseCounter() throws Exception {
+        Beanspruchung beanspruchung = beansprucht(1, Zustellungsstatus.UNGEKLAERT);
+        when(abgleichsport.statusAbfragen(auftragsId, Zielsystemtyp.IMPERIUM))
+                .thenReturn(Verarbeitungsstatus.mitExternerReferenz(
+                        Verarbeitungsstatus.Status.ABGESCHLOSSEN, "ISD-4711"));
+
+        durchlaufMit(beanspruchung);
+
+        org.junit.jupiter.api.Assertions.assertTrue(
+                meterRegistry.getMeters().stream()
+                        .noneMatch(m -> m.getId().getName().equals("durchlauferhitzer.lease.abgelaufen")));
+    }
+
+    @Test
     void fehlerEinerZeileBrichtDenDurchlaufNichtAb() throws Exception {
         Beanspruchung gescheitert = beansprucht(1);
         AuftragsId zweiteId = new AuftragsId(UUID.randomUUID());
@@ -158,6 +208,7 @@ class AbgleichssteuerungTest {
                 new Zustellung(zweiteId, Zielsystemtyp.IMPERIUM, Zustellungsstatus.IN_ABGLEICH,
                         null, 1, null, OffsetDateTime.now().plusSeconds(30), "abgleich-pod",
                         OffsetDateTime.now()),
+                Zustellungsstatus.UNGEKLAERT,
                 kaufauftrag);
         when(zustellungRepository.faelligeBeanspruchen(anyInt(), any(), anyString()))
                 .thenReturn(List.of(gescheitert, erfolgreich));

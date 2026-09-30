@@ -127,12 +127,13 @@ public class ZustellungRepository {
                                 new AuftragsId(rs.getObject(1, java.util.UUID.class));
                         org.kore.raumschiffwerft.model.entity.Zielsystemtyp zielsystem =
                                 org.kore.raumschiffwerft.model.entity.Zielsystemtyp.valueOf(rs.getString(2));
+                        Zustellungsstatus ausgangsstatus = Zustellungsstatus.valueOf(rs.getString(6));
                         Zustellung zustellung = new Zustellung(auftragsId, zielsystem,
-                                Zustellungsstatus.valueOf(rs.getString(6)),
+                                ausgangsstatus,
                                 null, rs.getInt(7), null, null, null,
                                 rs.getObject(5, OffsetDateTime.class));
                         zustellung.beanspruchen(rs.getObject(3, OffsetDateTime.class), rs.getString(4));
-                        beansprucht.add(new Beanspruchung(zustellung,
+                        beansprucht.add(new Beanspruchung(zustellung, ausgangsstatus,
                                 objectMapper.readValue(rs.getString(8),
                                         org.kore.raumschiffwerft.model.entity.Kaufauftrag.class)));
                     }

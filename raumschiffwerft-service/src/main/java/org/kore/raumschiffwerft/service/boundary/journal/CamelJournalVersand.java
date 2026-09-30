@@ -8,6 +8,8 @@ import org.apache.camel.Exchange;
 import org.apache.camel.ProducerTemplate;
 import org.apache.camel.component.kafka.KafkaConstants;
 import org.kore.raumschiffwerft.service.control.journal.JournalVersand;
+import org.kore.raumschiffwerft.service.control.journal.W3cTraceKontext;
+import io.opentelemetry.api.trace.SpanContext;
 
 /**
  * Boundary-Implementierung des Journal-Versands: ruft synchron die
@@ -37,6 +39,7 @@ public class CamelJournalVersand implements JournalVersand {
     public void senden(String auftragsId, String payload) {
         Exchange exchange = producerTemplate.send("direct:journalVersenden", ex -> {
             ex.getMessage().setHeader(KafkaConstants.KEY, auftragsId);
+            ex.getMessage().setHeader("traceparent", aktuellerTraceparent());
             ex.getMessage().setBody(payload);
         });
 
@@ -46,6 +49,12 @@ public class CamelJournalVersand implements JournalVersand {
                     "Kafka-Versand des Journaleintrags gescheitert (auftragsId=%s)"
                             .formatted(auftragsId), alsException(fehler));
         }
+    }
+
+    /** traceparent des aktiven Relay-Spans; ohne aktiven Span kein Header. */
+    private String aktuellerTraceparent() {
+        SpanContext kontext = io.opentelemetry.api.trace.Span.current().getSpanContext();
+        return kontext.isValid() ? W3cTraceKontext.traceparent(kontext) : null;
     }
 
     private Exception alsException(Throwable fehler) {

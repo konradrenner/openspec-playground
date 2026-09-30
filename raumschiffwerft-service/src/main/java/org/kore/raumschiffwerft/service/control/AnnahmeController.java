@@ -31,6 +31,7 @@ public class AnnahmeController {
     private final OutboxRepository outboxRepository;
     private final ZustellungRepository zustellungRepository;
     private final Zielsystemwahl zielsystemwahl;
+    private final TraceKontext traceKontext;
     private final ObjectMapper objectMapper;
     private final long leaseSekunden;
     private final String instanz;
@@ -38,7 +39,8 @@ public class AnnahmeController {
     @Inject
     public AnnahmeController(AgroalDataSource dataSource, AuftragRepository auftragRepository,
                              OutboxRepository outboxRepository, ZustellungRepository zustellungRepository,
-                             Zielsystemwahl zielsystemwahl, ObjectMapper objectMapper,
+                             Zielsystemwahl zielsystemwahl, TraceKontext traceKontext,
+                             ObjectMapper objectMapper,
                              @ConfigProperty(name = "zustellung.lease-sekunden") long leaseSekunden,
                              @ConfigProperty(name = "zustellung.instanz") String instanz) {
         this.dataSource = dataSource;
@@ -46,6 +48,7 @@ public class AnnahmeController {
         this.outboxRepository = outboxRepository;
         this.zustellungRepository = zustellungRepository;
         this.zielsystemwahl = zielsystemwahl;
+        this.traceKontext = traceKontext;
         this.objectMapper = objectMapper;
         this.leaseSekunden = leaseSekunden;
         this.instanz = instanz;
@@ -62,7 +65,8 @@ public class AnnahmeController {
         // Genau eine Flag-Auswertung pro Auftrag, vor dem Commit
         var zielsystemtyp = zielsystemwahl.waehlen(auftragsId, kaufauftrag);
         OffsetDateTime jetzt = OffsetDateTime.now();
-        String traceId = TraceKontext.traceId(traceparent);
+        String traceId = traceKontext.traceId(traceparent);
+        String aktuellerTraceparent = traceKontext.traceparent(traceparent);
 
         Connection verbindung;
         try {
@@ -85,7 +89,8 @@ public class AnnahmeController {
             }
 
             outboxRepository.journalEinfuegen(verbindung, auftragsId,
-                    journalPayload(auftragsId, kaufauftrag, rohPayload, traceparent, traceId, jetzt), jetzt);
+                    journalPayload(auftragsId, kaufauftrag, rohPayload, aktuellerTraceparent, traceId, jetzt),
+                    jetzt);
 
             Zustellung zustellung = new Zustellung(auftragsId, zielsystemtyp,
                     Zustellungsstatus.IN_ZUSTELLUNG, null, 0, null,
