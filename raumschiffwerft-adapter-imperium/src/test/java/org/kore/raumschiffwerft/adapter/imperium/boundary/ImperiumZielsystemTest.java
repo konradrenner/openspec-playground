@@ -7,7 +7,7 @@ import org.kore.raumschiffwerft.adapter.imperium.werft.v1.AbfrageBestellstatusRe
 import org.kore.raumschiffwerft.adapter.imperium.werft.v1.BestelleSternenzerstoerer;
 import org.kore.raumschiffwerft.adapter.imperium.werft.v1.BestelleSternenzerstoererResponse;
 import org.kore.raumschiffwerft.adapter.imperium.werft.v1.ImperiumWerft;
-import org.kore.raumschiffwerft.model.boundary.ZustellungUngeklaert;
+import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.model.entity.AuftragsId;
 import org.kore.raumschiffwerft.model.entity.Kaufauftrag;
 import org.kore.raumschiffwerft.model.entity.Sternenzerstoererklasse;

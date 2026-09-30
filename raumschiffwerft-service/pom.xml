@@ -12,6 +12,11 @@
 
   <artifactId>raumschiffwerft-service</artifactId>
 
+  <properties>
+    <!-- Quarkiverse-OpenFeature-Extension (flagd, Datei-Modus) -->
+    <quarkus-openfeature.version>1.0.0.Beta1</quarkus-openfeature.version>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>org.kore.raumschiffwerft</groupId>
@@ -36,6 +41,37 @@
     <dependency>
       <groupId>org.apache.camel.quarkus</groupId>
       <artifactId>camel-quarkus-core</artifactId>
+    </dependency>
+    <!-- direct:-Endpunkte der Zustell-Route -->
+    <dependency>
+      <groupId>org.apache.camel.quarkus</groupId>
+      <artifactId>camel-quarkus-direct</artifactId>
+    </dependency>
+    <!-- Persistenz: Flyway-Migrationen und plain JDBC gegen die devenv-Postgres -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-flyway</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
+    </dependency>
+    <!-- Bean Validation der Annahme (Idempotency-Key- und Body-Regeln) -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-hibernate-validator</artifactId>
+    </dependency>
+    <!-- Zielsystemwahl per OpenFeature-Flag (flagd, Datei-Modus flags/flags.json) -->
+    <dependency>
+      <groupId>io.quarkiverse.openfeature</groupId>
+      <artifactId>quarkus-openfeature-flagd</artifactId>
+      <version>${quarkus-openfeature.version}</version>
+    </dependency>
+    <!-- REST-Aufrufe in Integrationstests -->
+    <dependency>
+      <groupId>io.rest-assured</groupId>
+      <artifactId>rest-assured</artifactId>
+      <scope>test</scope>
     </dependency>
     <!-- Integrationstests (*IT, Failsafe) -->
     <dependency>

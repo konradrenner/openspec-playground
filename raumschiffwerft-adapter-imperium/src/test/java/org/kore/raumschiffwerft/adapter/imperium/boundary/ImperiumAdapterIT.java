@@ -8,7 +8,7 @@ import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.kore.raumschiffwerft.model.boundary.ZustellungUngeklaert;
+import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.model.entity.AuftragsId;
 import org.kore.raumschiffwerft.model.entity.Kaufauftrag;
 import org.kore.raumschiffwerft.model.entity.Sternenzerstoererklasse;

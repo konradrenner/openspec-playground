@@ -1,0 +1,19 @@
+{
+  "$comment": "Zielsystemwahl der Raumschiffwerft. Feste Zuordnung der Lieferplaneten: 4 = 'Yavin 4', 5 = 'Hoth', 6 = 'Dantooine' (-> rebellion); alle anderen Planeten und der Default laufen auf imperium.",
+  "flags": {
+    "zielsystem": {
+      "state": "ENABLED",
+      "variants": {
+        "imperium": "imperium",
+        "rebellion": "rebellion"
+      },
+      "defaultVariant": "imperium",
+      "targeting": {
+        "if": [
+          { "in": [ { "var": "lieferplanet" }, [4, 5, 6] ] },
+          "rebellion"
+        ]
+      }
+    }
+  }
+}

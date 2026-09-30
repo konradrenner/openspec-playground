@@ -6,7 +6,7 @@ import org.kore.raumschiffwerft.adapter.rebellion.control.RebellionUebersetzer;
 import org.kore.raumschiffwerft.adapter.rebellion.entity.BeschaffungsAnfrage;
 import org.kore.raumschiffwerft.adapter.rebellion.entity.BeschaffungsAntwort;
 import org.kore.raumschiffwerft.adapter.rebellion.entity.StatusAntwort;
-import org.kore.raumschiffwerft.model.boundary.ZustellungUngeklaert;
+import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.model.entity.AuftragsId;
 import org.kore.raumschiffwerft.model.entity.Kaufauftrag;
 import org.kore.raumschiffwerft.model.entity.Sternenzerstoererklasse;

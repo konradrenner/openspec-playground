@@ -1,4 +1,4 @@
-package org.kore.raumschiffwerft.model.boundary;
+package org.kore.raumschiffwerft.model.entity;
 
 import org.kore.raumschiffwerft.model.entity.AuftragsId;
 import org.kore.raumschiffwerft.model.entity.Kaufauftrag;

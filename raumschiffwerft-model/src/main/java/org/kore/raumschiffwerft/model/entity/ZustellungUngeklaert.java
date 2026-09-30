@@ -1,4 +1,4 @@
-package org.kore.raumschiffwerft.model.boundary;
+package org.kore.raumschiffwerft.model.entity;
 
 /**
  * Signalisiert, dass die Zustellung eines Auftrags oder die Statusabfrage

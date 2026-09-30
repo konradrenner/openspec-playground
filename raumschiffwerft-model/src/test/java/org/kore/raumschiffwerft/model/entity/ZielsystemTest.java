@@ -1,4 +1,4 @@
-package org.kore.raumschiffwerft.model.boundary;
+package org.kore.raumschiffwerft.model.entity;
 
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
