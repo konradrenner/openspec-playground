@@ -1,16 +1,14 @@
 package org.kore.raumschiffwerft.service.control.journal;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
 
-import io.agroal.api.AgroalDataSource;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
 import io.opentelemetry.context.Context;
@@ -24,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
@@ -40,7 +37,6 @@ class JournalRelayTest {
             "00-0af7651916cd43dd8448eb4c9cbbfda1-0af7651916cd43dd-01";
     private static final String TRACE_ID = "0af7651916cd43dd8448eb4c9cbbfda1";
 
-    private final AgroalDataSource dataSource = mock(AgroalDataSource.class);
     private final JournalOutboxRepository outboxRepository = mock(JournalOutboxRepository.class);
     private final JournalVersand versand = mock(JournalVersand.class);
 
@@ -76,7 +72,7 @@ class JournalRelayTest {
 
     @BeforeEach
     void aufbauen() {
-        relay = new JournalRelay(dataSource, outboxRepository, versand, sdk, 50);
+        relay = new JournalRelay(outboxRepository, versand, sdk, 50);
     }
 
     @AfterEach
@@ -89,39 +85,42 @@ class JournalRelayTest {
                 "{\"auftragsId\": \"%d\"}".formatted(id), traceparent);
     }
 
-    @Test
-    void versendetJedenEintragUndMarkiertErstDanach() throws Exception {
-        Connection verbindung = mock(Connection.class);
-        when(dataSource.getConnection()).thenReturn(verbindung);
-        Journaleintrag erster = eintrag(1, TRACEPARENT);
-        Journaleintrag zweiter = eintrag(2, TRACEPARENT);
-        when(outboxRepository.ungesendeteLesen(any(), anyInt()))
-                .thenReturn(List.of(erster, zweiter));
-
+    /** Der Outbox-Stub ruft den Relay-Versand je Eintrag auf (wie die echte Implementierung). */
+    private void relayMit(List<Journaleintrag> eintraege) {
+        when(outboxRepository.versenden(anyInt(), any())).thenAnswer(aufruf -> {
+            JournalOutboxRepository.Versand versand = aufruf.getArgument(1);
+            for (Journaleintrag eintrag : eintraege) {
+                versand.senden(eintrag);
+            }
+            return eintraege.size();
+        });
         relay.relay();
-
-        InOrder reihenfolge = inOrder(versand, outboxRepository, verbindung);
-        reihenfolge.verify(versand).senden(erster.auftragsId(), erster.payload());
-        reihenfolge.verify(outboxRepository).gesendetMarkieren(any(), anyLong(), any());
-        reihenfolge.verify(versand).senden(zweiter.auftragsId(), zweiter.payload());
-        reihenfolge.verify(outboxRepository).gesendetMarkieren(any(), anyLong(), any());
-        reihenfolge.verify(verbindung).commit();
     }
 
     @Test
-    void relaySpanTraegtLinkAufDenGespeichertenTraceparent() throws Exception {
-        Connection verbindung = mock(Connection.class);
-        when(dataSource.getConnection()).thenReturn(verbindung);
+    void versendetJedenEintragInEigenemRelaySpan() {
+        Journaleintrag erster = eintrag(1, TRACEPARENT);
+        Journaleintrag zweiter = eintrag(2, TRACEPARENT);
+
+        relayMit(List.of(erster, zweiter));
+
+        InOrder reihenfolge = inOrder(versand);
+        reihenfolge.verify(versand).senden(erster.auftragsId(), erster.payload());
+        reihenfolge.verify(versand).senden(zweiter.auftragsId(), zweiter.payload());
+        assertEquals(2, beendeteSpans.stream()
+                .filter(span -> span.getName().equals("journal.relay")).count());
+    }
+
+    @Test
+    void relaySpanTraegtLinkAufDenGespeichertenTraceparent() {
         Journaleintrag eintrag = eintrag(1, TRACEPARENT);
-        when(outboxRepository.ungesendeteLesen(any(), anyInt()))
-                .thenReturn(List.of(eintrag));
         AtomicReference<SpanContext> kontextBeimVersand = new AtomicReference<>();
         doAnswer(aufruf -> {
             kontextBeimVersand.set(Span.current().getSpanContext());
             return null;
         }).when(versand).senden(anyString(), anyString());
 
-        relay.relay();
+        relayMit(List.of(eintrag));
 
         ReadableSpan relaySpan = beendeteSpans.stream()
                 .filter(span -> span.getName().equals("journal.relay"))
@@ -136,12 +135,8 @@ class JournalRelayTest {
     }
 
     @Test
-    void ohneGespeichertenTraceparentGibtEsKeinenLink() throws Exception {
-        when(dataSource.getConnection()).thenReturn(mock(Connection.class));
-        when(outboxRepository.ungesendeteLesen(any(), anyInt()))
-                .thenReturn(List.of(eintrag(1, null)));
-
-        assertDoesNotThrow(() -> relay.relay());
+    void ohneGespeichertenTraceparentGibtEsKeinenLink() {
+        assertDoesNotThrow(() -> relayMit(List.of(eintrag(1, null))));
 
         ReadableSpan relaySpan = beendeteSpans.stream()
                 .filter(span -> span.getName().equals("journal.relay"))
@@ -150,35 +145,26 @@ class JournalRelayTest {
     }
 
     @Test
-    void sendefehlerRolltZurueckOhneCommit() throws Exception {
-        Connection verbindung = mock(Connection.class);
-        when(dataSource.getConnection()).thenReturn(verbindung);
-        when(outboxRepository.ungesendeteLesen(any(), anyInt()))
-                .thenReturn(List.of(eintrag(1, TRACEPARENT)));
-        doThrow(new IllegalStateException("Kafka weg")).when(versand).senden(anyString(), anyString());
+    void sendefehlerWirftNicht() {
+        when(outboxRepository.versenden(anyInt(), any()))
+                .thenThrow(new IllegalStateException("Kafka weg"));
 
         assertDoesNotThrow(() -> relay.relay());
 
-        verify(verbindung).rollback();
-        verify(verbindung, never()).commit();
-        verify(outboxRepository, never()).gesendetMarkieren(any(), anyLong(), any());
+        verify(versand, never()).senden(anyString(), anyString());
     }
 
     @Test
-    void leereOutboxCommittetOhneVersand() throws Exception {
-        Connection verbindung = mock(Connection.class);
-        when(dataSource.getConnection()).thenReturn(verbindung);
-        when(outboxRepository.ungesendeteLesen(any(), anyInt())).thenReturn(List.of());
-
-        relay.relay();
+    void leereOutboxVersendetNichtsUndWirftNicht() {
+        relayMit(List.of());
 
         verify(versand, never()).senden(anyString(), anyString());
-        verify(verbindung).commit();
     }
 
     @Test
-    void datenbankfehlerWirftNicht() throws Exception {
-        when(dataSource.getConnection()).thenThrow(new SQLException("Datenbank weg"));
+    void datenbankfehlerWirftNicht() {
+        when(outboxRepository.versenden(anyInt(), any()))
+                .thenThrow(new IllegalStateException("Datenbank weg"));
 
         assertDoesNotThrow(() -> relay.relay());
 

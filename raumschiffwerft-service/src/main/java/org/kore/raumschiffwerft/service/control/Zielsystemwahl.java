@@ -3,7 +3,6 @@ package org.kore.raumschiffwerft.service.control;
 import java.util.Map;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import org.jboss.logging.Logger;
 import dev.openfeature.sdk.Client;
 import dev.openfeature.sdk.ImmutableContext;
 import dev.openfeature.sdk.Value;
@@ -20,7 +19,9 @@ import org.kore.raumschiffwerft.model.entity.Zielsystemtyp;
 @ApplicationScoped
 public class Zielsystemwahl {
 
-    private static final Logger LOG = Logger.getLogger(Zielsystemwahl.class);
+
+    private static final java.util.logging.Logger LOG =
+            java.util.logging.Logger.getLogger(Zielsystemwahl.class.getName());
 
     private final Client openFeatureClient;
 
@@ -48,9 +49,13 @@ public class Zielsystemwahl {
             return Zielsystemtyp.REBELLION;
         }
         if (ursache != null) {
-            LOG.warnf(ursache, "Flag 'zielsystem' konnte nicht ausgewertet werden, falle auf imperium zurueck");
+            LOG.log(java.util.logging.Level.WARNING,
+                    "Flag 'zielsystem' konnte nicht ausgewertet werden, falle auf imperium zurueck",
+                    ursache);
         } else {
-            LOG.warnf("Flag 'zielsystem' lieferte den ungueltigen Wert '%s', falle auf imperium zurueck", wert);
+            LOG.log(java.util.logging.Level.WARNING,
+                    "Flag 'zielsystem' lieferte den ungueltigen Wert '{0}', falle auf imperium zurueck",
+                    wert);
         }
         return Zielsystemtyp.IMPERIUM;
     }

@@ -1,53 +1,26 @@
 package org.kore.raumschiffwerft.service.control.journal;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.time.OffsetDateTime;
-import java.util.ArrayList;
-import java.util.List;
-
 /**
- * Liest und markiert Outbox-Zeilen der Komponente journal per plain
- * JDBC. Der Zugriff laeuft in der Transaktion des Relays (Connection
- * von aussen), damit FOR UPDATE SKIP LOCKED die beanspruchten Zeilen
- * bis zum Commit gegenueber konkurrierenden Instanzen sperrt.
+ * Port des Journal-Relays auf die Outbox-Tabelle. Die Implementierung
+ * (JDBC, boundary/persistence/journal) kapselt den kompletten Durchlauf in
+ * EINER Transaktion: Zeilen mit FOR UPDATE SKIP LOCKED beanspruchen, je
+ * Zeile den Versand aufrufen, danach als gesendet markieren, committen.
+ * Ein Fehler des Versands rollt die Transaktion zurueck; der Relay kennt
+ * weder Verbindungen noch SQL.
  */
-public class JournalOutboxRepository {
-
-    private static final String UNGESENDETE_LESEN =
-            "SELECT id, auftrags_id::text, payload::text, payload->>'traceparent' FROM journal_outbox "
-                    + "WHERE gesendet_am IS NULL ORDER BY id LIMIT ? FOR UPDATE SKIP LOCKED";
-
-    private static final String GESENDET_MARKIEREN =
-            "UPDATE journal_outbox SET gesendet_am = ? WHERE id = ?";
+public interface JournalOutboxRepository {
 
     /**
-     * Liest bis zu batch ungesendete Zeilen fuer Update gesperrt; die
-     * Sperren gelten bis zum Commit der uebergebenen Verbindung.
+     * Sendet bis zu batch ungesendete Eintraege ueber den Versand und
+     * markiert jeden Eintrag erst nach erfolgreichem Versand. Rueckgabe
+     * ist die Anzahl der versendeten Eintraege.
      */
-    public List<Journaleintrag> ungesendeteLesen(Connection verbindung, int batch) throws SQLException {
-        List<Journaleintrag> eintraege = new ArrayList<>();
-        try (PreparedStatement ps = verbindung.prepareStatement(UNGESENDETE_LESEN)) {
-            ps.setInt(1, batch);
-            try (ResultSet rs = ps.executeQuery()) {
-                while (rs.next()) {
-                    eintraege.add(new Journaleintrag(rs.getLong(1), rs.getString(2),
-                            rs.getString(3), rs.getString(4)));
-                }
-            }
-        }
-        return List.copyOf(eintraege);
-    }
+    int versenden(int batch, Versand versand);
 
-    /** Markiert eine Zeile als gesendet; ohne Commit bleibt sie ungesendet. */
-    public void gesendetMarkieren(Connection verbindung, long id, OffsetDateTime gesendetAm)
-            throws SQLException {
-        try (PreparedStatement ps = verbindung.prepareStatement(GESENDET_MARKIEREN)) {
-            ps.setObject(1, gesendetAm);
-            ps.setLong(2, id);
-            ps.executeUpdate();
-        }
+    /** Versand eines Journaleintrags durch den Relay (Span, Kafka-Header). */
+    @FunctionalInterface
+    interface Versand {
+
+        void senden(Journaleintrag eintrag) throws Exception;
     }
 }

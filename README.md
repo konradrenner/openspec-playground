@@ -99,7 +99,8 @@ curl -sS http://localhost:8089/ping             # Ping-Stub
 
 ## Observability
 
-- **Traces** (`quarkus-opentelemetry`) gehen per OTLP gRPC an den Collector (4317), **Metriken** (`micrometer-registry-otlp`) per OTLP HTTP (4318): Counter `durchlauferhitzer.zustellungen` (zielsystem, ergebnis), `durchlauferhifter.lease.abgelaufen` (ausgangsstatus), Gauges `durchlauferhifter.zustellungen.offen`, `.fehlgeschlagen`, `durchlauferhifter.outbox.rueckstand`.
+- Alle drei Signale laufen über `quarkus-opentelemetry` per OTLP an den Collector: **Traces** gRPC (4317), **Metriken** OTLP HTTP (4318) und **Logs** gRPC (4317). Metriken und Logs sind in Quarkus per Default deaktiviert und in der `application.properties` explizit aktiviert (`quarkus.otel.metrics.enabled`, `quarkus.otel.logs.enabled`).
+- Metriken entstehen ausschließlich über die OpenTelemetry API (kein Micrometer im Classpath): Counter `durchlauferhitzer.zustellungen` (zielsystem, ergebnis), `durchlauferhifter.lease.abgelaufen` (ausgangsstatus), Gauges `durchlauferhifter.zustellungen.offen`, `.fehlgeschlagen`, `durchlauferhifter.outbox.rueckstand`.
 - **Wo die Traces erscheinen**: Der OTel-Collector exportiert im Debug-Modus in sein Prozesslog:
 
   ```bash
@@ -108,7 +109,7 @@ curl -sS http://localhost:8089/ping             # Ping-Stub
 
   Nach einer Annahme erscheinen dort der Request-Span (`POST /api/v1/kaufauftraege/...`) mit den Zustell-Anteilen, der Relay-Span `journal.relay` (per Span-Link mit dem Annahme-Trace verknüpft) und `journal.indexieren`. Suche nach der Trace-ID aus dem `traceparent`-Header (oder `auftrag.trace_id` in der Datenbank).
 
-- **Logs** tragen die Trace-ID des aktiven Kontexts in der Konsole; ein vollständiger OTLP-Log-Export ist in dieser Quarkus-Version nicht verfügbar (Traces und Metriken gehen vollständig über OTLP).
+- **Logs**: Der Anwendungscode loggt ausschließlich per `java.util.logging`; die Zeilen erscheinen mit der Trace-ID des aktiven Kontexts in der Konsole und werden per OTLP in die Log-Pipeline des Collectors exportiert.
 - Das Journal ist in OpenSearch nachlesbar (Index `durchlauferhitzer-journal`, Dokument-ID = Auftrags-ID, `rohPayload` nicht indiziert):
 
   ```bash

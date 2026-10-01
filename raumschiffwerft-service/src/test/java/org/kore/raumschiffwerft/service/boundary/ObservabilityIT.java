@@ -8,7 +8,6 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 import io.agroal.api.AgroalDataSource;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 
@@ -18,17 +17,15 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Integrationstest der Beobachtbarkeit: Die Annahme speichert auch ohne
- * Client-traceparent eine Trace-ID (aus dem Server-Span), die Span- und
- * Ergebnis-Metriken sind in der MeterRegistry sichtbar.
+ * Client-traceparent eine Trace-ID (aus dem Server-Span). Die Metriken
+ * laufen ausschliesslich ueber die OpenTelemetry API; ihr Verhalten ist
+ * unit-seitig abgedeckt, der Export im Collector-Log sichtbar.
  */
 @QuarkusTest
 class ObservabilityIT {
 
     @Inject
     AgroalDataSource dataSource;
-
-    @Inject
-    MeterRegistry meterRegistry;
 
     @Test
     void annahmeOhneTraceparentSpeichertTrotzdemEineTraceId() throws SQLException {
@@ -53,23 +50,5 @@ class ObservabilityIT {
                         "trace_id ist keine Trace-ID: " + traceId);
             }
         }
-    }
-
-    @Test
-    void ergebnisUndBetriebsmetrikenSindInDerRegistry() {
-        UUID id = UUID.randomUUID();
-
-        given()
-                .header("Idempotency-Key", id)
-                .header("Content-Type", "application/json")
-                .body("{\"kaeufer\": \"Tarkin\", \"klasse\": \"IMPERIAL_I\", \"anzahl\": 2, \"lieferplanet\": 42}")
-                .when().post("/api/v1/kaufauftraege")
-                .then().statusCode(200);
-
-        assertTrue(meterRegistry.get("durchlauferhitzer.zustellungen")
-                .tag("zielsystem", "IMPERIUM").tag("ergebnis", "BESTAETIGT").counter().count() >= 1);
-        assertNotNull(meterRegistry.get("durchlauferhitzer.zustellungen.offen").gauge());
-        assertNotNull(meterRegistry.get("durchlauferhitzer.zustellungen.fehlgeschlagen").gauge());
-        assertNotNull(meterRegistry.get("durchlauferhitzer.outbox.rueckstand").gauge());
     }
 }

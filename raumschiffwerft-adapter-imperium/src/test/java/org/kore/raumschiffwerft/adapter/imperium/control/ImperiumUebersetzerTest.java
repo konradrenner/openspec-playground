@@ -9,7 +9,6 @@ import org.kore.raumschiffwerft.model.entity.AuftragsId;
 import org.kore.raumschiffwerft.model.entity.Kaufauftrag;
 import org.kore.raumschiffwerft.model.entity.Sternenzerstoererklasse;
 import org.kore.raumschiffwerft.model.entity.Verarbeitungsstatus;
-import org.kore.raumschiffwerft.model.entity.Zustellbestaetigung;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 

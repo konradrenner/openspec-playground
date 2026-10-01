@@ -1,17 +1,20 @@
 package org.kore.raumschiffwerft.service.control;
 
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
+import java.util.logging.Level;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.logging.Logger;
 import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.model.entity.Zustellbestaetigung;
 import org.kore.raumschiffwerft.service.entity.Kaufauftrag;
 import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
-import io.micrometer.core.instrument.MeterRegistry;
+import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
 
 /**
  * Zustellungssteuerung: liefert nach dem Commit der Annahme jede
@@ -19,25 +22,27 @@ import io.micrometer.core.instrument.MeterRegistry;
  * kommt aus dem Speicher, kein DB-Select) und verbucht den Ausgang mit
  * GENAU EINEM konditionalen Update pro Zustellung. Der Adapter selbst
  * verbucht nie. Span-Attribute (auftrag.id, zielsystem, ergebnis) und
- * der Ergebnis-Counter werden hier gepflegt.
+ * der Ergebnis-Counter (OpenTelemetry API) werden hier gepflegt.
  */
 @ApplicationScoped
 public class Zustellungssteuerung {
 
-    private static final Logger LOG = Logger.getLogger(Zustellungssteuerung.class);
+    private static final java.util.logging.Logger LOG =
+            java.util.logging.Logger.getLogger(Zustellungssteuerung.class.getName());
 
     private final Zustellport zustellport;
     private final ZustellungRepository zustellungRepository;
-    private final MeterRegistry meterRegistry;
+    private final LongCounter zustellungsErgebnisse;
     private final long wiederholungSekunden;
 
     @Inject
     public Zustellungssteuerung(Zustellport zustellport, ZustellungRepository zustellungRepository,
-                                MeterRegistry meterRegistry,
+                                OpenTelemetry openTelemetry,
                                 @ConfigProperty(name = "zustellung.wiederholung-sekunden") long wiederholungSekunden) {
         this.zustellport = zustellport;
         this.zustellungRepository = zustellungRepository;
-        this.meterRegistry = meterRegistry;
+        this.zustellungsErgebnisse = openTelemetry.getMeterProvider().get("durchlauferhifter")
+                .counterBuilder("durchlauferhifter.zustellungen").build();
         this.wiederholungSekunden = wiederholungSekunden;
     }
 
@@ -52,30 +57,20 @@ public class Zustellungssteuerung {
                         auftrag.kanonischerAuftrag(), zustellung.zielsystem());
                 zustellung.bestaetigen(bestaetigung.externeReferenz());
             } catch (ZustellungUngeklaert e) {
-                LOG.warnf(e, "Zustellung an %s gescheitert (auftragsId=%s), als UNGEKLAERT verbucht",
-                        zustellung.zielsystem(), zustellung.auftragsId().wert());
+                LOG.log(Level.WARNING, "Zustellung an " + zustellung.zielsystem()
+                        + " gescheitert (auftragsId=" + zustellung.auftragsId().wert()
+                        + "), als UNGEKLAERT verbucht", e);
                 zustellung.ungeklaertErklaeren(OffsetDateTime.now().plusSeconds(wiederholungSekunden));
             }
             SpanAttribute.setzen("durchlauferhitzer.zustellstatus", zustellung.status().name());
-            verbuchen(zustellung, ausgangsstatus);
+            zustellungRepository.verbuchen(zustellung, ausgangsstatus);
             zaehlen(zustellung);
         }
     }
 
     private void zaehlen(Zustellung zustellung) {
-        meterRegistry.counter("durchlauferhitzer.zustellungen",
-                        "zielsystem", zustellung.zielsystem().name(),
-                        "ergebnis", zustellung.status().name())
-                .increment();
-    }
-
-    private void verbuchen(Zustellung zustellung, Zustellungsstatus erwarteterAusgangsstatus) {
-        try {
-            zustellungRepository.verbuchen(zustellung, erwarteterAusgangsstatus);
-        } catch (SQLException e) {
-            throw new IllegalStateException(
-                    "Verbuchen der Zustellung gescheitert (auftragsId=%s, zielsystem=%s)"
-                            .formatted(zustellung.auftragsId().wert(), zustellung.zielsystem()), e);
-        }
+        zustellungsErgebnisse.add(1, Attributes.of(
+                AttributeKey.stringKey("zielsystem"), zustellung.zielsystem().name(),
+                AttributeKey.stringKey("ergebnis"), zustellung.status().name()));
     }
 }

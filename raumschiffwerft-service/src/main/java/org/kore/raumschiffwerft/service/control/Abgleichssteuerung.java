@@ -1,21 +1,24 @@
 package org.kore.raumschiffwerft.service.control;
 
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Random;
+import java.util.logging.Level;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.logging.Logger;
 import org.kore.raumschiffwerft.model.entity.Verarbeitungsstatus;
 import org.kore.raumschiffwerft.model.entity.Zustellbestaetigung;
 import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.service.entity.Backoff;
 import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.opentelemetry.api.OpenTelemetry;
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+import io.opentelemetry.api.metrics.LongCounter;
+import io.opentelemetry.api.metrics.Meter;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import io.opentelemetry.context.Scope;
@@ -27,19 +30,22 @@ import io.opentelemetry.context.Scope;
  * gespeicherten Zielsystem ab und verbucht das Ergebnis. Nur UNBEKANNT
  * fuehrt zu einem Neuversand ueber den Zustellport. Nach max-versuchen
  * wird die Zustellung endgueltig als FEHLGESCHLAGEN verbucht. Ein Fehler
- * bei einer Zeile bricht den Durchlauf nicht ab.
+ * bei einer Zeile bricht den Durchlauf nicht ab. Zaehlungen laufen
+ * ausschliesslich ueber die OpenTelemetry API.
  */
 @ApplicationScoped
 public class Abgleichssteuerung {
 
-    private static final Logger LOG = Logger.getLogger(Abgleichssteuerung.class);
+    private static final java.util.logging.Logger LOG =
+            java.util.logging.Logger.getLogger(Abgleichssteuerung.class.getName());
 
     private final ZustellungRepository zustellungRepository;
     private final Abgleichsport abgleichsport;
     private final Zustellport zustellport;
     private final Backoff backoff;
     private final Tracer tracer;
-    private final MeterRegistry meterRegistry;
+    private final LongCounter zustellungsErgebnisse;
+    private final LongCounter leaseUebernahmen;
     private final long leaseSekunden;
     private final int maxVersuche;
     private final int batch;
@@ -50,7 +56,6 @@ public class Abgleichssteuerung {
                               Abgleichsport abgleichsport,
                               Zustellport zustellport,
                               OpenTelemetry openTelemetry,
-                              MeterRegistry meterRegistry,
                               @ConfigProperty(name = "zustellung.wiederholung-sekunden") long basisSekunden,
                               @ConfigProperty(name = "abgleich.backoff-max-sekunden") long backoffMaxSekunden,
                               @ConfigProperty(name = "abgleich.jitter-anteil") double jitterAnteil,
@@ -63,7 +68,9 @@ public class Abgleichssteuerung {
         this.zustellport = zustellport;
         this.backoff = new Backoff(basisSekunden, backoffMaxSekunden, jitterAnteil, new Random());
         this.tracer = openTelemetry.getTracer("durchlauferhitzer.abgleich");
-        this.meterRegistry = meterRegistry;
+        Meter meter = openTelemetry.getMeterProvider().get("durchlauferhifter");
+        this.zustellungsErgebnisse = meter.counterBuilder("durchlauferhifter.zustellungen").build();
+        this.leaseUebernahmen = meter.counterBuilder("durchlauferhifter.lease.abgelaufen").build();
         this.maxVersuche = maxVersuche;
         this.batch = batch;
         this.leaseSekunden = leaseSekunden;
@@ -79,17 +86,17 @@ public class Abgleichssteuerung {
         try {
             faellige = zustellungRepository.faelligeBeanspruchen(batch,
                     OffsetDateTime.now().plusSeconds(leaseSekunden), instanz);
-        } catch (SQLException e) {
-            LOG.warnf(e, "Abgleich: Beanspruchen faelliger Zustellungen gescheitert");
+        } catch (RuntimeException e) {
+            LOG.log(Level.WARNING, "Abgleich: Beanspruchen faelliger Zustellungen gescheitert", e);
             return;
         }
         for (Beanspruchung beanspruchung : faellige) {
             try {
                 verarbeiten(beanspruchung);
             } catch (RuntimeException e) {
-                LOG.warnf(e, "Abgleich: Verarbeitung einer Zustellung gescheitert (auftragsId=%s, zielsystem=%s)",
-                        beanspruchung.zustellung().auftragsId().wert(),
-                        beanspruchung.zustellung().zielsystem());
+                LOG.log(Level.WARNING, "Abgleich: Verarbeitung einer Zustellung gescheitert (auftragsId="
+                        + beanspruchung.zustellung().auftragsId().wert() + ", zielsystem="
+                        + beanspruchung.zustellung().zielsystem() + ")", e);
             }
         }
     }
@@ -118,9 +125,8 @@ public class Abgleichssteuerung {
     /** Absturz-Uebernahme: Ausgangszustand stammte aus einer abgelaufenen Lease. */
     private void zaehlenLeaseUebernahme(Beanspruchung beanspruchung) {
         if (beanspruchung.ausgangsstatus() != Zustellungsstatus.UNGEKLAERT) {
-            meterRegistry.counter("durchlauferhitzer.lease.abgelaufen",
-                            "ausgangsstatus", beanspruchung.ausgangsstatus().name())
-                    .increment();
+            leaseUebernahmen.add(1, Attributes.of(
+                    AttributeKey.stringKey("ausgangsstatus"), beanspruchung.ausgangsstatus().name()));
         }
     }
 
@@ -129,8 +135,9 @@ public class Abgleichssteuerung {
         try {
             status = abgleichsport.statusAbfragen(zustellung.auftragsId(), zustellung.zielsystem());
         } catch (ZustellungUngeklaert e) {
-            LOG.warnf(e, "Abgleich: Statusabfrage gescheitert (auftragsId=%s, zielsystem=%s)",
-                    zustellung.auftragsId().wert(), zustellung.zielsystem());
+            LOG.log(Level.WARNING, "Abgleich: Statusabfrage gescheitert (auftragsId="
+                    + zustellung.auftragsId().wert() + ", zielsystem=" + zustellung.zielsystem() + ")",
+                    e);
             ungeklaertVerbuchen(zustellung, e);
             return;
         }
@@ -143,9 +150,9 @@ public class Abgleichssteuerung {
 
     private void abgeschlossenVerbuchen(Zustellung zustellung, Verarbeitungsstatus status) {
         if (status.externeReferenz() == null) {
-            LOG.warnf("Abgleich: ABGESCHLOSSEN ohne externe Referenz, Zustellung bleibt offen "
-                            + "(auftragsId=%s, zielsystem=%s)",
-                    zustellung.auftragsId().wert(), zustellung.zielsystem());
+            LOG.log(Level.WARNING, "Abgleich: ABGESCHLOSSEN ohne externe Referenz, Zustellung bleibt "
+                    + "offen (auftragsId=" + zustellung.auftragsId().wert() + ", zielsystem="
+                    + zustellung.zielsystem() + ")");
             ungeklaertVerbuchen(zustellung, null);
             return;
         }
@@ -159,8 +166,9 @@ public class Abgleichssteuerung {
                     beanspruchung.kaufauftrag(), zustellung.zielsystem());
             zustellung.bestaetigen(bestaetigung.externeReferenz());
         } catch (ZustellungUngeklaert e) {
-            LOG.warnf(e, "Abgleich: Neuversand gescheitert (auftragsId=%s, zielsystem=%s)",
-                    zustellung.auftragsId().wert(), zustellung.zielsystem());
+            LOG.log(Level.WARNING, "Abgleich: Neuversand gescheitert (auftragsId="
+                    + zustellung.auftragsId().wert() + ", zielsystem=" + zustellung.zielsystem() + ")",
+                    e);
             ungeklaertVerbuchen(zustellung, e);
             return;
         }
@@ -169,9 +177,9 @@ public class Abgleichssteuerung {
 
     private void ungeklaertVerbuchen(Zustellung zustellung, Throwable ursache) {
         if (zustellung.versuche() >= maxVersuche) {
-            LOG.errorf(ursache, "Zustellung nach %d Versuchen endgueltig gescheitert "
-                            + "(auftragsId=%s, zielsystem=%s)",
-                    zustellung.versuche(), zustellung.auftragsId().wert(), zustellung.zielsystem());
+            LOG.log(Level.SEVERE, "Zustellung nach " + zustellung.versuche()
+                    + " Versuchen endgueltig gescheitert (auftragsId=" + zustellung.auftragsId().wert()
+                    + ", zielsystem=" + zustellung.zielsystem() + ")", ursache);
             zustellung.fehlgeschlagenErklaeren();
         } else {
             zustellung.ungeklaertErklaeren(
@@ -181,16 +189,9 @@ public class Abgleichssteuerung {
     }
 
     private void verbuchen(Zustellung zustellung) {
-        try {
-            zustellungRepository.verbuchen(zustellung, Zustellungsstatus.IN_ABGLEICH);
-            meterRegistry.counter("durchlauferhitzer.zustellungen",
-                            "zielsystem", zustellung.zielsystem().name(),
-                            "ergebnis", zustellung.status().name())
-                    .increment();
-        } catch (SQLException e) {
-            throw new IllegalStateException(
-                    "Verbuchen des Abgleichsergebnisses gescheitert (auftragsId=%s, zielsystem=%s)"
-                            .formatted(zustellung.auftragsId().wert(), zustellung.zielsystem()), e);
-        }
+        zustellungRepository.verbuchen(zustellung, Zustellungsstatus.IN_ABGLEICH);
+        zustellungsErgebnisse.add(1, Attributes.of(
+                AttributeKey.stringKey("zielsystem"), zustellung.zielsystem().name(),
+                AttributeKey.stringKey("ergebnis"), zustellung.status().name()));
     }
 }

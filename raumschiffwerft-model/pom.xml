@@ -11,4 +11,26 @@
   </parent>
 
   <artifactId>raumschiffwerft-model</artifactId>
+
+  <dependencies>
+    <!-- Bean-Validation-Constraints der Modell-Records: nur die API, provided,
+         damit sie weder im Artefakt landet noch transitiv weitergereicht wird -->
+    <dependency>
+      <groupId>jakarta.validation</groupId>
+      <artifactId>jakarta.validation-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- Validator fuer die Constraint-Pruefung in den Unit-Tests -->
+    <dependency>
+      <groupId>org.hibernate.validator</groupId>
+      <artifactId>hibernate-validator</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!-- EL-Implementierung fuer die Message-Interpolation des Validators -->
+    <dependency>
+      <groupId>org.glassfish.expressly</groupId>
+      <artifactId>expressly</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
 </project>

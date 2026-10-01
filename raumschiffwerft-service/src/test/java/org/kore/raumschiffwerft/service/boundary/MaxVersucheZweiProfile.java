@@ -1,11 +1,5 @@
 package org.kore.raumschiffwerft.service.boundary;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-import java.sql.ResultSet;
-import java.time.OffsetDateTime;
-import java.util.UUID;
 import java.util.Map;
 import io.quarkus.test.junit.QuarkusTestProfile;
 

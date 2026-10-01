@@ -1,9 +1,9 @@
 package org.kore.raumschiffwerft.service.control;
 
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+
 import org.junit.jupiter.api.Test;
 import org.kore.raumschiffwerft.model.entity.AuftragsId;
 import org.kore.raumschiffwerft.model.entity.Kaufauftrag;
@@ -14,6 +14,9 @@ import org.kore.raumschiffwerft.model.entity.Zustellbestaetigung;
 import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
 import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
+
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -31,14 +34,12 @@ class AbgleichssteuerungTest {
     private final ZustellungRepository zustellungRepository = mock(ZustellungRepository.class);
     private final Abgleichsport abgleichsport = mock(Abgleichsport.class);
     private final Zustellport zustellport = mock(Zustellport.class);
-    private final io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry =
-            new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    private final MessendeTelemetrie telemetrie = new MessendeTelemetrie();
 
     // kurze Backoff-Basis und max-versuche 2 wie im Testprofil
     private final Abgleichssteuerung steuerung =
             new Abgleichssteuerung(zustellungRepository, abgleichsport, zustellport,
-                    io.opentelemetry.api.OpenTelemetry.noop(), meterRegistry,
-                    1, 4, 0.2, 2, 20, 2, "abgleich-pod");
+                    telemetrie, 1, 4, 0.2, 2, 20, 2, "abgleich-pod");
 
     private final AuftragsId auftragsId = new AuftragsId(UUID.randomUUID());
     private final Kaufauftrag kaufauftrag =
@@ -58,7 +59,7 @@ class AbgleichssteuerungTest {
                 kaufauftrag);
     }
 
-    private void durchlaufMit(Beanspruchung beanspruchung) throws SQLException {
+    private void durchlaufMit(Beanspruchung beanspruchung) {
         when(zustellungRepository.faelligeBeanspruchen(anyInt(), any(), anyString()))
                 .thenReturn(List.of(beanspruchung));
         steuerung.abgleichen();
@@ -167,9 +168,9 @@ class AbgleichssteuerungTest {
 
         durchlaufMit(beanspruchung);
 
-        org.junit.jupiter.api.Assertions.assertEquals(1, meterRegistry
-                .get("durchlauferhitzer.zustellungen")
-                .tag("zielsystem", "IMPERIUM").tag("ergebnis", "BESTAETIGT").counter().count());
+        assertEquals(1, telemetrie.stand("durchlauferhifter.zustellungen",
+                Attributes.of(AttributeKey.stringKey("zielsystem"), "IMPERIUM",
+                        AttributeKey.stringKey("ergebnis"), "BESTAETIGT")));
     }
 
     @Test
@@ -181,9 +182,8 @@ class AbgleichssteuerungTest {
 
         durchlaufMit(beanspruchung);
 
-        org.junit.jupiter.api.Assertions.assertEquals(1, meterRegistry
-                .get("durchlauferhitzer.lease.abgelaufen")
-                .tag("ausgangsstatus", "IN_ZUSTELLUNG").counter().count());
+        assertEquals(1, telemetrie.stand("durchlauferhifter.lease.abgelaufen",
+                Attributes.of(AttributeKey.stringKey("ausgangsstatus"), "IN_ZUSTELLUNG")));
     }
 
     @Test
@@ -195,9 +195,7 @@ class AbgleichssteuerungTest {
 
         durchlaufMit(beanspruchung);
 
-        org.junit.jupiter.api.Assertions.assertTrue(
-                meterRegistry.getMeters().stream()
-                        .noneMatch(m -> m.getId().getName().equals("durchlauferhitzer.lease.abgelaufen")));
+        assertEquals(0, telemetrie.stand("durchlauferhifter.lease.abgelaufen"));
     }
 
     @Test
@@ -228,7 +226,7 @@ class AbgleichssteuerungTest {
     @Test
     void beanspruchenFehlerBeendetDenDurchlaufOhneException() throws Exception {
         when(zustellungRepository.faelligeBeanspruchen(anyInt(), any(), anyString()))
-                .thenThrow(new SQLException("Datenbank weg"));
+                .thenThrow(new IllegalStateException("Datenbank weg"));
 
         steuerung.abgleichen();
 

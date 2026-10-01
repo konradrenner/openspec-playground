@@ -2,14 +2,11 @@ package org.kore.raumschiffwerft.model.entity;
 
 import java.util.UUID;
 
+import jakarta.validation.constraints.NotNull;
+
 /**
  * Identitaet eines Auftrags der Raumschiffwerft, gekapselt als UUID.
+ * Die Pflichtregel ist als Bean-Validation-Constraint deklariert.
  */
-public record AuftragsId(UUID wert) {
-
-    public AuftragsId {
-        if (wert == null) {
-            throw new IllegalArgumentException("wert darf nicht null sein");
-        }
-    }
+public record AuftragsId(@NotNull UUID wert) {
 }

@@ -1,9 +1,8 @@
 package org.kore.raumschiffwerft.service.control;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
+
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -13,20 +12,20 @@ import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.agroal.api.AgroalDataSource;
 
 /**
- * Annahme eines Kaufauftrags in EINER Transaktion: Zielsystemwahl vor dem
- * Commit, INSERT auftrag mit ON CONFLICT DO NOTHING als Idempotenz-Check,
- * Journaleintrag und Zustellungszeile(n) mit Lease. Bei Konflikt wird der
- * bestehende Stand zurueckgegeben und nichts weiter geschrieben.
+ * Annahme eines Kaufauftrags in EINER Transaktion (Transaktionsverwalter):
+ * Zielsystemwahl vor dem Commit, INSERT auftrag mit ON CONFLICT DO NOTHING
+ * als Idempotenz-Check, Journaleintrag und Zustellungszeile(n) mit Lease.
+ * Bei Konflikt wird der bestehende Stand zurueckgegeben und nichts weiter
+ * geschrieben.
  */
 @ApplicationScoped
 public class AnnahmeController {
 
     private static final int SCHEMA_VERSION = 1;
 
-    private final AgroalDataSource dataSource;
+    private final Transaktionsverwalter transaktionsverwalter;
     private final AuftragRepository auftragRepository;
     private final OutboxRepository outboxRepository;
     private final ZustellungRepository zustellungRepository;
@@ -37,13 +36,14 @@ public class AnnahmeController {
     private final String instanz;
 
     @Inject
-    public AnnahmeController(AgroalDataSource dataSource, AuftragRepository auftragRepository,
+    public AnnahmeController(Transaktionsverwalter transaktionsverwalter,
+                             AuftragRepository auftragRepository,
                              OutboxRepository outboxRepository, ZustellungRepository zustellungRepository,
                              Zielsystemwahl zielsystemwahl, TraceKontext traceKontext,
                              ObjectMapper objectMapper,
                              @ConfigProperty(name = "zustellung.lease-sekunden") long leaseSekunden,
                              @ConfigProperty(name = "zustellung.instanz") String instanz) {
-        this.dataSource = dataSource;
+        this.transaktionsverwalter = transaktionsverwalter;
         this.auftragRepository = auftragRepository;
         this.outboxRepository = outboxRepository;
         this.zustellungRepository = zustellungRepository;
@@ -68,19 +68,10 @@ public class AnnahmeController {
         String traceId = traceKontext.traceId(traceparent);
         String aktuellerTraceparent = traceKontext.traceparent(traceparent);
 
-        Connection verbindung;
-        try {
-            verbindung = dataSource.getConnection();
-        } catch (SQLException | RuntimeException e) {
-            throw new DatenbankNichtErreichbar(e);
-        }
-
-        try (verbindung) {
-            verbindung.setAutoCommit(false);
-            int eingefuegt = auftragRepository.anlegen(verbindung, auftragsId,
+        return transaktionsverwalter.inTransaktion(() -> {
+            int eingefuegt = auftragRepository.anlegen(auftragsId,
                     kanonischesJson(kaufauftrag), SCHEMA_VERSION, traceId, jetzt);
             if (eingefuegt == 0) {
-                verbindung.rollback();
                 return new AnnahmeErgebnis(
                         auftragRepository.stand(auftragsId)
                                 .orElseThrow(() -> new IllegalStateException(
@@ -88,27 +79,18 @@ public class AnnahmeController {
                         false);
             }
 
-            outboxRepository.journalEinfuegen(verbindung, auftragsId,
-                    journalPayload(auftragsId, kaufauftrag, rohPayload, aktuellerTraceparent, traceId, jetzt),
-                    jetzt);
+            outboxRepository.journalEinfuegen(auftragsId,
+                    journalPayload(auftragsId, kaufauftrag, rohPayload, aktuellerTraceparent,
+                            traceId, jetzt), jetzt);
 
             Zustellung zustellung = new Zustellung(auftragsId, zielsystemtyp,
                     Zustellungsstatus.IN_ZUSTELLUNG, null, 0, null,
                     jetzt.plusSeconds(leaseSekunden), instanz, jetzt);
-            zustellungRepository.anlegen(verbindung, zustellung);
+            zustellungRepository.anlegen(zustellung);
 
-            verbindung.commit();
             return new AnnahmeErgebnis(
                     new Kaufauftrag(auftragsId, kaufauftrag, jetzt, List.of(zustellung)), true);
-        } catch (SQLException | RuntimeException e) {
-            try {
-                verbindung.rollback();
-            } catch (SQLException rollbackFehler) {
-                e.addSuppressed(rollbackFehler);
-            }
-            throw new IllegalStateException("Annahme gescheitert (auftragsId=%s)"
-                    .formatted(auftragsId.wert()), e);
-        }
+        });
     }
 
     private String kanonischesJson(org.kore.raumschiffwerft.model.entity.Kaufauftrag kaufauftrag) {

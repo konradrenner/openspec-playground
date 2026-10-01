@@ -1,9 +1,9 @@
 package org.kore.raumschiffwerft.service.control;
 
-import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.kore.raumschiffwerft.model.entity.ZustellungUngeklaert;
@@ -14,6 +14,9 @@ import org.kore.raumschiffwerft.model.entity.Zustellbestaetigung;
 import org.kore.raumschiffwerft.service.entity.Zustellungsstatus;
 import org.kore.raumschiffwerft.service.entity.Zustellung;
 
+import io.opentelemetry.api.common.AttributeKey;
+import io.opentelemetry.api.common.Attributes;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
@@ -23,18 +26,24 @@ import static org.mockito.Mockito.when;
 
 class ZustellungssteuerungTest {
 
+    private static final Attributes IMPERIUM_BESTAETIGT = Attributes.of(
+            AttributeKey.stringKey("zielsystem"), "IMPERIUM",
+            AttributeKey.stringKey("ergebnis"), "BESTAETIGT");
+    private static final Attributes IMPERIUM_UNGEKLAERT = Attributes.of(
+            AttributeKey.stringKey("zielsystem"), "IMPERIUM",
+            AttributeKey.stringKey("ergebnis"), "UNGEKLAERT");
+
     private final Zustellport zustellport = mock(Zustellport.class);
     private final ZustellungRepository zustellungRepository = mock(ZustellungRepository.class);
-    private final io.micrometer.core.instrument.simple.SimpleMeterRegistry meterRegistry =
-            new io.micrometer.core.instrument.simple.SimpleMeterRegistry();
+    private final MessendeTelemetrie telemetrie = new MessendeTelemetrie();
     private final Zustellungssteuerung steuerung =
-            new Zustellungssteuerung(zustellport, zustellungRepository, meterRegistry, 60);
+            new Zustellungssteuerung(zustellport, zustellungRepository, telemetrie, 60);
 
     private final AuftragsId auftragsId = new AuftragsId(UUID.randomUUID());
     private Zustellung zustellung;
 
     @BeforeEach
-    void aufbauen() throws SQLException {
+    void aufbauen() {
         zustellung = new Zustellung(auftragsId, Zielsystemtyp.IMPERIUM,
                 Zustellungsstatus.IN_ZUSTELLUNG, null, 0, null,
                 OffsetDateTime.now().plusMinutes(10), "test-pod", OffsetDateTime.now());
@@ -49,7 +58,7 @@ class ZustellungssteuerungTest {
     }
 
     @Test
-    void erfolgWirdAlsBestaetigtVerbucht() throws SQLException, ZustellungUngeklaert {
+    void erfolgWirdAlsBestaetigtVerbucht() throws ZustellungUngeklaert {
         when(zustellport.zustellen(auftragsId, auftrag(zustellung).kanonischerAuftrag(), Zielsystemtyp.IMPERIUM))
                 .thenReturn(new Zustellbestaetigung("ISD-4711"));
 
@@ -58,12 +67,11 @@ class ZustellungssteuerungTest {
         assertEquals(Zustellungsstatus.BESTAETIGT, zustellung.status());
         assertEquals("ISD-4711", zustellung.externeReferenz());
         verify(zustellungRepository).verbuchen(zustellung, Zustellungsstatus.IN_ZUSTELLUNG);
-        assertEquals(1, meterRegistry.get("durchlauferhitzer.zustellungen")
-                .tag("zielsystem", "IMPERIUM").tag("ergebnis", "BESTAETIGT").counter().count());
+        assertEquals(1, telemetrie.stand("durchlauferhifter.zustellungen", IMPERIUM_BESTAETIGT));
     }
 
     @Test
-    void misserfolgWirdAlsUngeklaertMitNaechstemVersuchVerbucht() throws SQLException, ZustellungUngeklaert {
+    void misserfolgWirdAlsUngeklaertMitNaechstemVersuchVerbucht() throws ZustellungUngeklaert {
         when(zustellport.zustellen(any(), any(), any())).thenThrow(new ZustellungUngeklaert("Stub-Fehler"));
 
         steuerung.zustellen(auftrag(zustellung));
@@ -71,12 +79,11 @@ class ZustellungssteuerungTest {
         assertEquals(Zustellungsstatus.UNGEKLAERT, zustellung.status());
         assertNotNull(zustellung.naechsterVersuchUm());
         verify(zustellungRepository).verbuchen(zustellung, Zustellungsstatus.IN_ZUSTELLUNG);
-        assertEquals(1, meterRegistry.get("durchlauferhitzer.zustellungen")
-                .tag("zielsystem", "IMPERIUM").tag("ergebnis", "UNGEKLAERT").counter().count());
+        assertEquals(1, telemetrie.stand("durchlauferhifter.zustellungen", IMPERIUM_UNGEKLAERT));
     }
 
     @Test
-    void verbuchenOhneTrefferWirftKeinenFehler() throws SQLException, ZustellungUngeklaert {
+    void verbuchenOhneTrefferWirftKeinenFehler() throws ZustellungUngeklaert {
         when(zustellungRepository.verbuchen(any(), any())).thenReturn(0);
         when(zustellport.zustellen(any(), any(), any())).thenThrow(new ZustellungUngeklaert("Stub-Fehler"));
 
@@ -86,7 +93,7 @@ class ZustellungssteuerungTest {
     }
 
     @Test
-    void jedeZustellungWirdGenauEinmalAngestoßen() throws SQLException, ZustellungUngeklaert {
+    void jedeZustellungWirdGenauEinmalAngestoßen() throws ZustellungUngeklaert {
         when(zustellport.zustellen(any(), any(), any())).thenReturn(new Zustellbestaetigung("ISD-4711"));
         Zustellung zweite = new Zustellung(auftragsId, Zielsystemtyp.REBELLION,
                 Zustellungsstatus.IN_ZUSTELLUNG, null, 0, null,

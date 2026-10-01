@@ -5,7 +5,6 @@ import java.util.UUID;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.logging.Logger;
 
 /**
  * Aufraeum-Steuerung: ein Durchlauf sichert sich zuerst mit der
@@ -17,7 +16,8 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class AufraeumSteuerung {
 
-    private static final Logger LOG = Logger.getLogger(AufraeumSteuerung.class);
+    private static final java.util.logging.Logger LOG =
+            java.util.logging.Logger.getLogger(AufraeumSteuerung.class.getName());
 
     private final Aufraeumung aufraeumung;
     private final Aufbewahrungsregel regel;
@@ -49,10 +49,11 @@ public class AufraeumSteuerung {
                     .toList();
             if (!loeschbar.isEmpty()) {
                 aufraeumung.auftraegeLoeschen(loeschbar);
-                LOG.infof("Aufraeumen: %d abgeschlossene Auftraege geloescht", loeschbar.size());
+                LOG.log(java.util.logging.Level.INFO,
+                        "Aufraeumen: {0} abgeschlossene Auftraege geloescht", loeschbar.size());
             }
         } catch (RuntimeException e) {
-            LOG.warnf(e, "Aufraeumen: Durchlauf gescheitert");
+            LOG.log(java.util.logging.Level.WARNING, "Aufraeumen: Durchlauf gescheitert", e);
         } finally {
             if (gesperrt) {
                 aufraeumung.entsperren();

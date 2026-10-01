@@ -1,58 +1,44 @@
 package org.kore.raumschiffwerft.service.control;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-
-import io.agroal.api.AgroalDataSource;
-import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import org.kore.raumschiffwerft.model.entity.AuftragsId;
+import org.kore.raumschiffwerft.model.entity.Sternenzerstoererklasse;
+import org.kore.raumschiffwerft.model.entity.Zielsystemtyp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class BetriebsmetrikenTest {
 
-    private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    private final AgroalDataSource dataSource = Mockito.mock(AgroalDataSource.class);
-    private final Connection verbindung = Mockito.mock(Connection.class);
-    private final PreparedStatement statement = Mockito.mock(PreparedStatement.class);
-    private final ResultSet resultSet = Mockito.mock(ResultSet.class);
+    private final Bestandszaehler bestandszaehler = mock(Bestandszaehler.class);
+    private final MessendeTelemetrie telemetrie = new MessendeTelemetrie();
+    private final Betriebsmetriken metriken = new Betriebsmetriken(telemetrie, bestandszaehler);
 
-    private Betriebsmetriken metriken;
+    @Test
+    void gaugesWerdenRegistriertUndMessenDieBestaende() {
+        when(bestandszaehler.offeneZustellungen()).thenReturn(5L);
+        when(bestandszaehler.fehlgeschlageneZustellungen()).thenReturn(2L);
+        when(bestandszaehler.outboxRueckstand()).thenReturn(3L);
 
-    @BeforeEach
-    void aufbauen() throws SQLException {
-        Mockito.when(dataSource.getConnection()).thenReturn(verbindung);
-        Mockito.when(verbindung.prepareStatement(Mockito.anyString())).thenReturn(statement);
-        Mockito.when(statement.executeQuery()).thenReturn(resultSet);
-        Mockito.when(resultSet.next()).thenReturn(true);
-        metriken = new Betriebsmetriken(registry, dataSource);
+        metriken.gaugesRegistrieren(null);
+        telemetrie.gaugesMessen();
+
+        assertEquals(5, telemetrie.gaugeWert("durchlauferhifter.zustellungen.offen"));
+        assertEquals(2, telemetrie.gaugeWert("durchlauferhifter.zustellungen.fehlgeschlagen"));
+        assertEquals(3, telemetrie.gaugeWert("durchlauferhifter.outbox.rueckstand"));
     }
 
     @Test
-    void gaugesWerdenRegistriert() {
+    void gaugesMessenErneutBeiJederAbfrage() {
+        when(bestandszaehler.offeneZustellungen()).thenReturn(1L).thenReturn(7L);
+
         metriken.gaugesRegistrieren(null);
 
-        assertNotNull(registry.get("durchlauferhitzer.zustellungen.offen").gauge());
-        assertNotNull(registry.get("durchlauferhitzer.zustellungen.fehlgeschlagen").gauge());
-        assertNotNull(registry.get("durchlauferhitzer.outbox.rueckstand").gauge());
-    }
+        telemetrie.gaugesMessen();
+        assertEquals(1, telemetrie.gaugeWert("durchlauferhifter.zustellungen.offen"));
 
-    @Test
-    void zaehlungLiestDenCountAusDerDatenbank() throws SQLException {
-        Mockito.when(resultSet.getLong(1)).thenReturn(5L);
-
-        assertEquals(5, metriken.zaehlen("SELECT count(*) FROM zustellung WHERE status = 'X'"));
-    }
-
-    @Test
-    void zaehlfehlerLiefertNull() throws SQLException {
-        Mockito.when(dataSource.getConnection()).thenThrow(new SQLException("weg"));
-
-        assertEquals(0, metriken.zaehlen("SELECT count(*)"));
+        telemetrie.gaugesMessen();
+        assertEquals(7, telemetrie.gaugeWert("durchlauferhifter.zustellungen.offen"));
     }
 }
