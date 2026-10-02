@@ -28,6 +28,11 @@
       <groupId>io.quarkiverse.cxf</groupId>
       <artifactId>quarkus-cxf</artifactId>
     </dependency>
+    <!-- Client-Span je externem Aufruf (Adapter-Spans am Boundary) -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+    </dependency>
     <!-- QuarkusTest-basierte Integrationstests (*IT, Failsafe) -->
     <dependency>
       <groupId>io.quarkus</groupId>

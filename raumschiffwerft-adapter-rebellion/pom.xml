@@ -27,6 +27,11 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-rest-client-jackson</artifactId>
     </dependency>
+    <!-- Client-Span je externem Aufruf (Adapter-Spans am Boundary) -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+    </dependency>
     <!-- QuarkusTest-basierte Integrationstests (*IT, Failsafe) -->
     <dependency>
       <groupId>io.quarkus</groupId>

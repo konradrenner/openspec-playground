@@ -8,7 +8,7 @@ Alles läuft über devenv (kein Docker):
 
 ```bash
 direnv allow                # oder: devenv shell
-devenv up -d                # Postgres, Kafka, OpenSearch, OTel-Collector, WireMock starten
+devenv up -d                # Postgres, Kafka, OpenSearch, OTel-Collector, WireMock, Zipkin starten
 devenv processes status postgres
 ```
 
@@ -18,7 +18,7 @@ Service im Dev-Modus starten:
 mvn -pl raumschiffwerft-service quarkus:dev
 ```
 
-Ports: Service 8080, WireMock 8089, Postgres 5432, OpenSearch 9200, OTel-Collector 4317 (gRPC) / 4318 (HTTP).
+Ports: Service 8080, WireMock 8089, Postgres 5432, OpenSearch 9200, OTel-Collector 4317 (gRPC) / 4318 (HTTP), Zipkin 9411.
 
 ## Service-API
 
@@ -107,7 +107,15 @@ curl -sS http://localhost:8089/ping             # Ping-Stub
   devenv processes logs opentelemetry-collector
   ```
 
-  Nach einer Annahme erscheinen dort der Request-Span (`POST /api/v1/kaufauftraege/...`) mit den Zustell-Anteilen, der Relay-Span `journal.relay` (per Span-Link mit dem Annahme-Trace verknüpft) und `journal.indexieren`. Suche nach der Trace-ID aus dem `traceparent`-Header (oder `auftrag.trace_id` in der Datenbank).
+  Nach einer Annahme erscheinen dort der Request-Span (`POST /api/v1/kaufauftraege/...`), je Routenschritt Spans der Zustell-Route (`zustellen`, `bean-validator`), ein `db.transaktion`-Span mit je einem `db.zugriff`-Span pro Statement, der Adapter-Span des externen Aufrufs (`adapter.imperium.zustellen` bzw. `adapter.rebellion.zustellen`) samt HTTP-Kind-Span, der Relay-Span `journal.relay` (per Span-Link mit dem Annahme-Trace verknüpft) und `journal.indexieren` mit dem OpenSearch-PUT. Suche nach der Trace-ID aus dem `traceparent`-Header (oder `auftrag.trace_id` in der Datenbank). Der CXF-SOAP-Client erzeugt zusätzlich automatisch einen HTTP-Kind-Span unter dem Adapter-Span; Abgleich und Journal-Kette tragen dieselben Span-Arten (`abgleich`, `adapter.*.statusAbfragen`, Kafka Producer/Consumer).
+
+- **Zipkin-UI**: Der Collector exportiert die Traces zusätzlich nach Zipkin (in-memory, devenv-Prozess):
+
+  ```bash
+  http://localhost:9411/zipkin/
+  ```
+
+  Trace-ID aus dem `traceparent`-Header (oder `auftrag.trace_id`) ins Suchfeld eintragen. Zipkin hält die Daten nur im Speicher — nach `devenv processes restart zipkin` sind sie weg und die Traces müssen neu erzeugt werden.
 
 - **Logs**: Der Anwendungscode loggt ausschließlich per `java.util.logging`; die Zeilen erscheinen mit der Trace-ID des aktiven Kontexts in der Konsole und werden per OTLP in die Log-Pipeline des Collectors exportiert.
 - Das Journal ist in OpenSearch nachlesbar (Index `durchlauferhitzer-journal`, Dokument-ID = Auftrags-ID, `rohPayload` nicht indiziert):

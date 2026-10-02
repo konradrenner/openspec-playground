@@ -62,6 +62,11 @@
       <groupId>org.apache.camel.quarkus</groupId>
       <artifactId>camel-quarkus-kafka</artifactId>
     </dependency>
+    <!-- Spans je Routenschritt: Camel-OpenTelemetry-Tracer an der Quarkus-OTel-Instanz -->
+    <dependency>
+      <groupId>org.apache.camel.quarkus</groupId>
+      <artifactId>camel-quarkus-opentelemetry</artifactId>
+    </dependency>
     <!-- OpenSearch-Indexierung (REST-Client) -->
     <dependency>
       <groupId>io.quarkus</groupId>
